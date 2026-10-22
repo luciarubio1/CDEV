@@ -23,6 +23,7 @@ export class HoseView {
   );
 
   private watering = false;
+  private equipped = false;
 
   constructor(private readonly camera: THREE.Camera, private readonly scene: THREE.Scene) {
     const hose = new THREE.Mesh(
@@ -41,13 +42,22 @@ export class HoseView {
     this.nozzle.position.set(0.26, -0.3, -0.78);
     this.object.add(this.nozzle);
     this.water.visible = false;
+    this.object.visible = false;
     this.scene.add(this.water);
     this.camera.add(this.object);
   }
 
+  setEquipped(equipped: boolean): void {
+    this.equipped = equipped;
+    this.object.visible = equipped;
+    if (!equipped) {
+      this.setWatering(false);
+    }
+  }
+
   setWatering(enabled: boolean): void {
-    this.watering = enabled;
-    this.water.visible = enabled;
+    this.watering = enabled && this.equipped;
+    this.water.visible = this.watering;
   }
 
   update(target: THREE.Vector3 | null): void {

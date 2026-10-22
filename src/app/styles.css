@@ -29,7 +29,8 @@ canvas {
 .interaction,
 .environment-panel,
 .water-hud,
-.health-hud {
+.health-hud,
+.preparation-checklist {
   position: fixed;
   z-index: 1;
   border: 1px solid rgb(255 255 255 / 20%);
@@ -69,6 +70,53 @@ canvas {
   padding: 10px 14px;
   color: #e7f4df;
   font-size: 14px;
+}
+
+.preparation-checklist {
+  top: 76px;
+  left: 16px;
+  display: flex;
+  max-width: min(90vw, 300px);
+  padding: 10px 12px;
+  flex-direction: column;
+  gap: 6px;
+  color: #dce9d7;
+  font-size: 13px;
+}
+
+.preparation-checklist strong {
+  margin-bottom: 2px;
+  color: #ffffff;
+  font-size: 14px;
+}
+
+.preparation-checklist span {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.preparation-checklist i {
+  min-width: 14px;
+  color: #ffcf68;
+  font-style: normal;
+  font-weight: bold;
+}
+
+.preparation-checklist span.completed {
+  color: #a7e5a7;
+}
+
+.preparation-checklist span.completed i {
+  color: #30bc14;
+}
+
+.preparation-checklist.complete {
+  border-color: rgb(48 188 20 / 60%);
+}
+
+.preparation-checklist.hidden {
+  display: none;
 }
 
 .environment-panel {
@@ -228,6 +276,65 @@ canvas {
     rgb(155 12 12 / 8%) 62%,
     rgb(214 26 26 / 74%) 100%
   );
+}
+
+.guide-dialogue {
+  position: fixed;
+  z-index: 3;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgb(7 11 8 / 68%);
+}
+
+.guide-dialogue.visible {
+  display: flex;
+}
+
+.guide-dialogue__card {
+  display: flex;
+  width: min(100%, 560px);
+  padding: 30px;
+  flex-direction: column;
+  gap: 18px;
+  border: 1px solid rgb(255 200 87 / 60%);
+  border-radius: 12px;
+  background: rgb(20 31 24 / 97%);
+  box-shadow: 0 12px 42px rgb(0 0 0 / 45%);
+}
+
+.guide-dialogue__card strong {
+  color: #ffcf68;
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.guide-dialogue__card p {
+  margin: 0;
+  color: #f5f7f2;
+  font-size: clamp(17px, 2.7vw, 21px);
+  line-height: 1.45;
+  white-space: pre-line;
+}
+
+.guide-dialogue__card button {
+  align-self: flex-end;
+  border: 0;
+  border-radius: 6px;
+  padding: 11px 16px;
+  cursor: pointer;
+  background: #e85d04;
+  color: #ffffff;
+  font: inherit;
+  font-weight: bold;
+}
+
+.guide-dialogue__card button:hover,
+.guide-dialogue__card button:focus-visible {
+  background: #ff7420;
 }
 
 .defeat-overlay {

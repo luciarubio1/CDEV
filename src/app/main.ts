@@ -1,8 +1,19 @@
 import * as THREE from 'three';
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { AudioManager } from '../audio/audio-manager';
 import { FireSystem } from '../game/fire/fire-system';
 import { GameSession, type DefeatReason } from '../game/game-session';
+import { IntroDialogue } from '../game/narrative/intro-dialogue';
+import {
+  PREPARATION_TASKS,
+  PreparationSequence,
+} from '../game/narrative/preparation-sequence';
+import {
+  createGuideNpc,
+  GUIDE_NPC_INTERACTION_RADIUS,
+  GUIDE_NPC_POSITION,
+} from '../game/npc/guide-npc';
 import { HoseView } from '../game/player/hose-view';
 import {
   MAX_PLAYER_HEALTH,
@@ -29,6 +40,8 @@ if (!app) {
 }
 
 const gameSession = new GameSession();
+const introDialogue = new IntroDialogue();
+const audioManager = new AudioManager();
 let experienceStarted = false;
 
 const scene = new THREE.Scene();
@@ -88,6 +101,18 @@ interaction.className = 'interaction hidden';
 interaction.textContent = 'Presioná E para usar la manguera';
 app.appendChild(interaction);
 
+const preparationChecklist = document.createElement('aside');
+preparationChecklist.className = 'preparation-checklist';
+preparationChecklist.innerHTML = `
+  <strong>Preparación</strong>
+  ${PREPARATION_TASKS.map(
+    (task) =>
+      `<span data-preparation-task="${task.id}"><i>○</i>${task.label}</span>`,
+  ).join('')}
+`;
+preparationChecklist.classList.add('hidden');
+app.appendChild(preparationChecklist);
+
 const waterHud = document.createElement('aside');
 waterHud.className = 'water-hud';
 waterHud.innerHTML = `
@@ -120,6 +145,21 @@ const damageVignette = document.createElement('div');
 damageVignette.className = 'damage-vignette';
 app.appendChild(damageVignette);
 
+const guideDialogueOverlay = document.createElement('section');
+guideDialogueOverlay.className = 'guide-dialogue';
+guideDialogueOverlay.innerHTML = `
+  <div class="guide-dialogue__card" role="dialog" aria-modal="true">
+    <strong>Guía de emergencia</strong>
+    <p></p>
+    <button type="button">Entendido</button>
+  </div>
+`;
+app.appendChild(guideDialogueOverlay);
+
+const guideDialogueText = guideDialogueOverlay.querySelector<HTMLParagraphElement>('p');
+const guideDialogueButton = guideDialogueOverlay.querySelector<HTMLButtonElement>('button');
+guideDialogueButton?.addEventListener('click', () => closeGuideDialogue());
+
 const defeatOverlay = document.createElement('section');
 defeatOverlay.className = 'defeat-overlay';
 defeatOverlay.innerHTML = `
@@ -137,11 +177,12 @@ restartButton?.addEventListener('click', () => window.location.reload());
 
 controls.addEventListener('lock', () => {
   experienceStarted = true;
+  audioManager.start();
   instructions.classList.add('hidden');
 });
 
 controls.addEventListener('unlock', () => {
-  if (experienceStarted && !gameSession.isOver) {
+  if (experienceStarted && !gameSession.isOver && !introDialogue.isOpen) {
     instructions.classList.remove('hidden');
   }
 });
@@ -210,6 +251,10 @@ const hoseView = new HoseView(camera, scene);
 const waterTank = new WaterTank();
 const playerHealth = new PlayerHealth();
 scene.add(createFireTruck());
+const preparationSequence = new PreparationSequence();
+preparationSequence.setAvailable(false);
+scene.add(preparationSequence.object);
+scene.add(createGuideNpc());
 
 const loader = new GLTFLoader();
 const modelCache = new Map<string, THREE.Object3D>();
@@ -329,7 +374,11 @@ async function loadEnvironment(): Promise<void> {
 
   try {
     await Promise.all(assets);
-    status.textContent = 'Incendio activo · Focos: 1';
+    status.textContent = !introDialogue.isComplete
+      ? 'Hablá con la guía junto al camión'
+      : preparationSequence.isComplete
+      ? `Incendio activo · Focos: ${fireSystem.activeCount}`
+      : 'Preparación requerida · acercate al camión';
   } catch (error) {
     status.textContent = 'Error al cargar un modelo del escenario';
     console.error('No se pudo cargar el entorno 3D.', error);
@@ -398,6 +447,9 @@ const healthyColor = new THREE.Color(0x30bc14);
 const warningHealthColor = new THREE.Color(0xf2c94c);
 const criticalHealthColor = new THREE.Color(0xd62828);
 let reloadedAt = Number.NEGATIVE_INFINITY;
+let equipmentReadyAt = Number.NEGATIVE_INFINITY;
+let audioStatusUntil = Number.NEGATIVE_INFINITY;
+let audioStatusMessage = '';
 let damageVignetteOpacity = 0;
 
 function isNearFireTruck(): boolean {
@@ -406,6 +458,52 @@ function isNearFireTruck(): boolean {
     camera.position.z - FIRE_TRUCK_POSITION.z,
   );
   return horizontalDistance <= FIRE_TRUCK_RELOAD_RADIUS;
+}
+
+function isNearGuideNpc(): boolean {
+  const horizontalDistance = Math.hypot(
+    camera.position.x - GUIDE_NPC_POSITION.x,
+    camera.position.z - GUIDE_NPC_POSITION.z,
+  );
+  return horizontalDistance <= GUIDE_NPC_INTERACTION_RADIUS;
+}
+
+function getNearestFireDistance(): number {
+  return fireSystem.activePositions.reduce(
+    (nearest, firePosition) =>
+      Math.min(nearest, camera.position.distanceTo(firePosition)),
+    Number.POSITIVE_INFINITY,
+  );
+}
+
+function showAudioStatus(muted: boolean): void {
+  audioStatusMessage = muted ? 'Audio silenciado' : 'Audio activado';
+  audioStatusUntil = performance.now() + 1800;
+}
+
+function showGuideDialogue(): void {
+  introDialogue.show();
+  keys.clear();
+  hoseView.setWatering(false);
+  if (guideDialogueText) {
+    guideDialogueText.textContent = introDialogue.text;
+  }
+  guideDialogueOverlay.classList.add('visible');
+  controls.unlock();
+}
+
+function closeGuideDialogue(): void {
+  const firstConversation = !introDialogue.isComplete;
+  introDialogue.close();
+  guideDialogueOverlay.classList.remove('visible');
+
+  if (firstConversation) {
+    preparationSequence.setAvailable(true);
+    preparationChecklist.classList.remove('hidden');
+    status.textContent = 'Preparación requerida · acercate al camión';
+  }
+
+  controls.lock();
 }
 
 function updateWaterHud(): void {
@@ -417,6 +515,40 @@ function updateWaterHud(): void {
     waterValue.textContent = `${Math.ceil(waterTank.amount)} / ${MAX_WATER}`;
   }
   waterHud.classList.toggle('empty', waterTank.isEmpty);
+}
+
+function updatePreparationChecklist(): void {
+  PREPARATION_TASKS.forEach((task) => {
+    const taskElement = preparationChecklist.querySelector<HTMLElement>(
+      `[data-preparation-task="${task.id}"]`,
+    );
+    if (!taskElement) {
+      return;
+    }
+
+    const completed = preparationSequence.isTaskCompleted(task.id);
+    taskElement.classList.toggle('completed', completed);
+    const indicator = taskElement.querySelector<HTMLElement>('i');
+    if (indicator) {
+      indicator.textContent = completed ? '✓' : '○';
+    }
+  });
+  preparationChecklist.classList.toggle('complete', preparationSequence.isComplete);
+}
+
+function completePreparationTask(): void {
+  const completedTask = preparationSequence.completeCurrentTask(camera.position);
+  if (!completedTask) {
+    return;
+  }
+
+  updatePreparationChecklist();
+  if (preparationSequence.isComplete) {
+    hoseView.setEquipped(true);
+    equipmentReadyAt = performance.now();
+  } else {
+    status.textContent = `${completedTask.label} completado`;
+  }
 }
 
 function updateHealthHud(dangerLevel: number, delta: number): void {
@@ -451,6 +583,7 @@ function endGame(reason: DefeatReason): void {
   gameSession.end(reason);
   keys.clear();
   hoseView.setWatering(false);
+  audioManager.playDefeatOnce();
   controls.unlock();
   instructions.classList.add('hidden');
 
@@ -469,6 +602,24 @@ function updateInteraction(nearFireTruck: boolean): void {
     return;
   }
 
+  if (!introDialogue.isComplete) {
+    if (isNearGuideNpc()) {
+      interaction.textContent = 'Presioná F para hablar';
+      interaction.classList.remove('hidden');
+    } else {
+      interaction.classList.add('hidden');
+    }
+    return;
+  }
+
+  if (!preparationSequence.isComplete) {
+    interaction.textContent =
+      preparationSequence.getInteractionMessage(camera.position) ??
+      `Preparación pendiente: ${preparationSequence.currentTask?.label}`;
+    interaction.classList.remove('hidden');
+    return;
+  }
+
   if (nearFireTruck) {
     interaction.textContent = 'Presioná R para recargar agua';
   } else if (waterTank.isEmpty) {
@@ -484,15 +635,47 @@ function updateInteraction(nearFireTruck: boolean): void {
 }
 
 window.addEventListener('keydown', (event) => {
+  if (event.code === 'KeyM') {
+    event.preventDefault();
+    showAudioStatus(audioManager.toggleMuted());
+    return;
+  }
+
   if (gameSession.isOver) {
+    return;
+  }
+
+  if (introDialogue.isOpen) {
+    if (event.code === 'Enter') {
+      event.preventDefault();
+      closeGuideDialogue();
+    }
     return;
   }
 
   keys.add(event.code);
 
-  if (event.code === 'KeyR' && controls.isLocked && isNearFireTruck()) {
+  if (event.code === 'KeyF' && controls.isLocked) {
+    if (isNearGuideNpc()) {
+      showGuideDialogue();
+      return;
+    }
+    if (introDialogue.isComplete && !preparationSequence.isComplete) {
+      completePreparationTask();
+    }
+  }
+
+  if (
+    event.code === 'KeyR' &&
+    controls.isLocked &&
+    introDialogue.isComplete &&
+    preparationSequence.isComplete &&
+    isNearFireTruck() &&
+    !event.repeat
+  ) {
     waterTank.refill();
     reloadedAt = performance.now();
+    audioManager.playTruckRefill();
   }
 });
 
@@ -508,6 +691,14 @@ renderer.domElement.addEventListener('click', () => {
     controls.lock();
   }
 });
+
+// Iniciar el ambiente dentro del gesto nativo del usuario evita que el
+// navegador bloquee la reproducción al esperar el evento de Pointer Lock.
+renderer.domElement.addEventListener(
+  'pointerdown',
+  () => audioManager.start(),
+  { once: true },
+);
 
 function updateMovement(delta: number): void {
   if (!controls.isLocked || gameSession.isOver) {
@@ -547,52 +738,70 @@ function animate(): void {
 
   if (experienceStarted && !gameSession.isOver) {
     updateMovement(delta);
-    fireSystem.update(delta);
-    dangerLevel = playerHealth.updateFromFirePositions(
-      camera.position,
-      fireSystem.activePositions,
-      delta,
-    );
-    houseRisk.update(housePosition, fireSystem.activePositions, delta);
 
-    if (playerHealth.isDepleted) {
-      endGame('player');
-    } else if (houseRisk.isBurned) {
-      house.ignite();
-      endGame('house');
-    }
+    if (!introDialogue.isComplete) {
+      hoseView.setWatering(false);
+      hoseView.update(null);
+      status.textContent = 'Hablá con la guía junto al camión';
+    } else {
+      preparationSequence.update(delta);
 
-    if (!gameSession.isOver) {
-      const nearestFire = fireSystem.getNearestActivePosition(camera.position, 4);
-      const usingHose = keys.has('KeyE') && controls.isLocked;
-
-      if (usingHose && nearestFire && !waterTank.isEmpty) {
-        const activeTime = waterTank.consume(delta);
-        extinguishing =
-          activeTime > 0 &&
-          fireSystem.extinguishNearest(
-            camera.position,
-            4,
-            activeTime * EXTINGUISH_RATE_PER_SECOND,
-          );
-      }
-
-      hoseView.setWatering(extinguishing);
-      hoseView.update(extinguishing ? nearestFire : null);
-
-      if (performance.now() - reloadedAt < 1500) {
-        status.textContent = 'Agua recargada al 100%';
-      } else if (usingHose && waterTank.isEmpty) {
-        status.textContent = 'Sin agua · la manguera no puede apagar el fuego';
-      } else if (extinguishing) {
-        status.textContent = `Manguera activa · Focos: ${fireSystem.activeCount}`;
-      } else if (usingHose) {
-        status.textContent = `Acercate al fuego · Focos: ${fireSystem.activeCount}`;
-      } else {
+      if (!preparationSequence.isComplete) {
+        hoseView.setWatering(false);
+        hoseView.update(null);
         status.textContent =
-          `Incendio en expansión · Focos: ${fireSystem.activeCount} · ` +
-          `Vegetación afectada: ${fireSystem.combustiblesIgnited}/` +
-          `${fireSystem.combustibleCount}`;
+          `Preparación: ${preparationSequence.currentTask?.label ?? 'completa'}`;
+      } else {
+        fireSystem.update(delta);
+        dangerLevel = playerHealth.updateFromFirePositions(
+          camera.position,
+          fireSystem.activePositions,
+          delta,
+        );
+        houseRisk.update(housePosition, fireSystem.activePositions, delta);
+
+        if (playerHealth.isDepleted) {
+          endGame('player');
+        } else if (houseRisk.isBurned) {
+          house.ignite();
+          endGame('house');
+        }
+
+        if (!gameSession.isOver) {
+          const nearestFire = fireSystem.getNearestActivePosition(camera.position, 4);
+          const usingHose = keys.has('KeyE') && controls.isLocked;
+
+          if (usingHose && nearestFire && !waterTank.isEmpty) {
+            const activeTime = waterTank.consume(delta);
+            extinguishing =
+              activeTime > 0 &&
+              fireSystem.extinguishNearest(
+                camera.position,
+                4,
+                activeTime * EXTINGUISH_RATE_PER_SECOND,
+              );
+          }
+
+          hoseView.setWatering(extinguishing);
+          hoseView.update(extinguishing ? nearestFire : null);
+
+          if (performance.now() - equipmentReadyAt < 2500) {
+            status.textContent = 'Equipo listo. Contené el incendio.';
+          } else if (performance.now() - reloadedAt < 1500) {
+            status.textContent = 'Agua recargada al 100%';
+          } else if (usingHose && waterTank.isEmpty) {
+            status.textContent = 'Sin agua · la manguera no puede apagar el fuego';
+          } else if (extinguishing) {
+            status.textContent = `Manguera activa · Focos: ${fireSystem.activeCount}`;
+          } else if (usingHose) {
+            status.textContent = `Acercate al fuego · Focos: ${fireSystem.activeCount}`;
+          } else {
+            status.textContent =
+              `Incendio en expansión · Focos: ${fireSystem.activeCount} · ` +
+              `Vegetación afectada: ${fireSystem.combustiblesIgnited}/` +
+              `${fireSystem.combustibleCount}`;
+          }
+        }
       }
     }
   }
@@ -601,10 +810,32 @@ function animate(): void {
     hoseView.setWatering(false);
     hoseView.update(null);
   }
+
+  audioManager.setTruckSiren(
+    experienceStarted && !gameSession.isOver && !preparationSequence.isComplete,
+  );
+  if (
+    experienceStarted &&
+    !gameSession.isOver &&
+    preparationSequence.isComplete
+  ) {
+    audioManager.updateFire(
+      fireSystem.activeCount,
+      getNearestFireDistance(),
+      delta,
+    );
+  } else {
+    audioManager.updateFire(0, Number.POSITIVE_INFINITY, delta);
+  }
+  audioManager.setWaterSpray(!gameSession.isOver && extinguishing);
+
   updateWaterHud();
   updateHealthHud(dangerLevel, delta);
   updateInteraction(isNearFireTruck());
   updateEnvironmentPanel();
+  if (performance.now() < audioStatusUntil) {
+    status.textContent = audioStatusMessage;
+  }
   marker.rotation.y += delta * 0.8;
   renderer.render(scene, camera);
 }
