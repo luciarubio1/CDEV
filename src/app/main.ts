@@ -2,13 +2,20 @@ import * as THREE from 'three';
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { FireSystem } from '../game/fire/fire-system';
+import { GameSession, type DefeatReason } from '../game/game-session';
 import { HoseView } from '../game/player/hose-view';
+import {
+  MAX_PLAYER_HEALTH,
+  PlayerHealth,
+} from '../game/player/player-health';
 import { MAX_WATER, WaterTank } from '../game/player/water-tank';
 import {
   createFireTruck,
   FIRE_TRUCK_POSITION,
   FIRE_TRUCK_RELOAD_RADIUS,
 } from '../game/world/fire-truck';
+import { House } from '../game/world/house';
+import { HouseRisk } from '../game/world/house-risk';
 import './styles.css';
 
 const MAP_HALF_SIZE = 25;
@@ -20,6 +27,9 @@ const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) {
   throw new Error('No se encontró el contenedor principal de la aplicación.');
 }
+
+const gameSession = new GameSession();
+let experienceStarted = false;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xb3c7cf);
@@ -66,7 +76,10 @@ environmentPanel.innerHTML = `
   <strong>Estado del entorno</strong>
   <span data-metric="expansion">Expansión: calculando</span>
   <span data-metric="vegetation">Vegetación afectada: 0%</span>
-  <span data-metric="house">Riesgo para la casa: evaluando</span>
+  <span data-metric="house">Riesgo de la casa: 0% · Estable</span>
+  <div class="house-risk-meter" aria-label="Exposición de la casa al incendio">
+    <div class="house-risk-meter__fill"></div>
+  </div>
 `;
 app.appendChild(environmentPanel);
 
@@ -89,12 +102,48 @@ app.appendChild(waterHud);
 const waterFill = waterHud.querySelector<HTMLDivElement>('.water-meter__fill');
 const waterValue = waterHud.querySelector<HTMLSpanElement>('.water-value');
 
+const healthHud = document.createElement('aside');
+healthHud.className = 'health-hud';
+healthHud.innerHTML = `
+  <strong>Salud</strong>
+  <div class="health-meter" aria-label="Salud del jugador">
+    <div class="health-meter__fill"></div>
+  </div>
+  <span class="health-value">100 / 100</span>
+`;
+app.appendChild(healthHud);
+
+const healthFill = healthHud.querySelector<HTMLDivElement>('.health-meter__fill');
+const healthValue = healthHud.querySelector<HTMLSpanElement>('.health-value');
+
+const damageVignette = document.createElement('div');
+damageVignette.className = 'damage-vignette';
+app.appendChild(damageVignette);
+
+const defeatOverlay = document.createElement('section');
+defeatOverlay.className = 'defeat-overlay';
+defeatOverlay.innerHTML = `
+  <div class="defeat-card">
+    <strong>Fin de la experiencia</strong>
+    <h1></h1>
+    <button type="button">Reiniciar experiencia</button>
+  </div>
+`;
+app.appendChild(defeatOverlay);
+
+const defeatMessage = defeatOverlay.querySelector<HTMLHeadingElement>('h1');
+const restartButton = defeatOverlay.querySelector<HTMLButtonElement>('button');
+restartButton?.addEventListener('click', () => window.location.reload());
+
 controls.addEventListener('lock', () => {
+  experienceStarted = true;
   instructions.classList.add('hidden');
 });
 
 controls.addEventListener('unlock', () => {
-  instructions.classList.remove('hidden');
+  if (experienceStarted && !gameSession.isOver) {
+    instructions.classList.remove('hidden');
+  }
 });
 
 const ambientLight = new THREE.HemisphereLight(0xd8ecff, 0x46513f, 1.5);
@@ -153,9 +202,13 @@ fireSystem.trackCombustible({
 });
 scene.add(fireSystem.object);
 const housePosition = new THREE.Vector3(10, 0, 10);
+const house = new House(housePosition);
+const houseRisk = new HouseRisk();
+scene.add(house.object);
 
 const hoseView = new HoseView(camera, scene);
 const waterTank = new WaterTank();
+const playerHealth = new PlayerHealth();
 scene.add(createFireTruck());
 
 const loader = new GLTFLoader();
@@ -285,37 +338,15 @@ async function loadEnvironment(): Promise<void> {
 
 void loadEnvironment();
 
-function addHouse(): void {
-  const house = new THREE.Group();
-  const walls = new THREE.Mesh(
-    new THREE.BoxGeometry(5, 2.8, 4),
-    new THREE.MeshStandardMaterial({ color: 0x9b7653, roughness: 0.9 }),
-  );
-  walls.position.y = 1.4;
-  walls.castShadow = true;
-  walls.receiveShadow = true;
-  house.add(walls);
-
-  const roof = new THREE.Mesh(
-    new THREE.ConeGeometry(3.6, 2.2, 4),
-    new THREE.MeshStandardMaterial({ color: 0x4b3832, roughness: 0.85 }),
-  );
-  roof.rotation.y = Math.PI / 4;
-  roof.position.y = 3.9;
-  roof.castShadow = true;
-  house.add(roof);
-  house.position.copy(housePosition);
-  scene.add(house);
-}
-
-addHouse();
-
 const expansionMetric =
   environmentPanel.querySelector<HTMLElement>('[data-metric="expansion"]');
 const vegetationMetric =
   environmentPanel.querySelector<HTMLElement>('[data-metric="vegetation"]');
 const houseMetric =
   environmentPanel.querySelector<HTMLElement>('[data-metric="house"]');
+const houseRiskFill = environmentPanel.querySelector<HTMLDivElement>(
+  '.house-risk-meter__fill',
+);
 
 function updateEnvironmentPanel(): void {
   const affectedPercentage =
@@ -324,15 +355,12 @@ function updateEnvironmentPanel(): void {
       : Math.round(
           (fireSystem.combustiblesIgnited / fireSystem.combustibleCount) * 100,
         );
-  const nearestHouseDistance = fireSystem.activePositions.reduce(
-    (nearest, position) =>
-      Math.min(nearest, position.distanceTo(housePosition)),
-    Number.POSITIVE_INFINITY,
-  );
-  const houseRisk =
-    nearestHouseDistance <= 7
+  const houseExposurePercentage = Math.round(houseRisk.exposureRatio * 100);
+  const houseRiskLabel = houseRisk.isBurned
+    ? 'Incendiada'
+    : houseExposurePercentage >= 60
       ? 'Alto'
-      : nearestHouseDistance <= 14
+      : houseExposurePercentage >= 25
         ? 'Moderado'
         : 'Bajo';
 
@@ -345,8 +373,12 @@ function updateEnvironmentPanel(): void {
       `Vegetación afectada: ${affectedPercentage}%`;
   }
   if (houseMetric) {
-    houseMetric.textContent = `Riesgo para la casa: ${houseRisk}`;
-    houseMetric.dataset.risk = houseRisk.toLowerCase();
+    houseMetric.textContent =
+      `Riesgo de la casa: ${houseExposurePercentage}% · ${houseRiskLabel}`;
+    houseMetric.dataset.risk = houseRiskLabel.toLowerCase();
+  }
+  if (houseRiskFill) {
+    houseRiskFill.style.width = `${houseExposurePercentage}%`;
   }
 }
 
@@ -362,7 +394,11 @@ const keys = new Set<string>();
 const movement = new THREE.Vector3();
 const direction = new THREE.Vector3();
 const clock = new THREE.Clock();
+const healthyColor = new THREE.Color(0x30bc14);
+const warningHealthColor = new THREE.Color(0xf2c94c);
+const criticalHealthColor = new THREE.Color(0xd62828);
 let reloadedAt = Number.NEGATIVE_INFINITY;
+let damageVignetteOpacity = 0;
 
 function isNearFireTruck(): boolean {
   const horizontalDistance = Math.hypot(
@@ -383,8 +419,52 @@ function updateWaterHud(): void {
   waterHud.classList.toggle('empty', waterTank.isEmpty);
 }
 
+function updateHealthHud(dangerLevel: number, delta: number): void {
+  const healthRatio = playerHealth.amount / MAX_PLAYER_HEALTH;
+  const healthColor =
+    healthRatio >= 0.5
+      ? healthyColor.clone().lerp(warningHealthColor, (1 - healthRatio) * 2)
+      : warningHealthColor
+          .clone()
+          .lerp(criticalHealthColor, (0.5 - healthRatio) * 2);
+
+  if (healthFill) {
+    healthFill.style.width = `${healthRatio * 100}%`;
+    healthFill.style.backgroundColor = `#${healthColor.getHexString()}`;
+  }
+  if (healthValue) {
+    healthValue.textContent =
+      `${Math.ceil(playerHealth.amount)} / ${MAX_PLAYER_HEALTH}`;
+  }
+
+  const targetOpacity = dangerLevel * 0.65;
+  damageVignetteOpacity = THREE.MathUtils.damp(
+    damageVignetteOpacity,
+    targetOpacity,
+    7,
+    delta,
+  );
+  damageVignette.style.opacity = `${damageVignetteOpacity}`;
+}
+
+function endGame(reason: DefeatReason): void {
+  gameSession.end(reason);
+  keys.clear();
+  hoseView.setWatering(false);
+  controls.unlock();
+  instructions.classList.add('hidden');
+
+  if (defeatMessage) {
+    defeatMessage.textContent =
+      reason === 'player'
+        ? 'El fuego te superó'
+        : 'La casa fue alcanzada por el incendio';
+  }
+  defeatOverlay.classList.add('visible');
+}
+
 function updateInteraction(nearFireTruck: boolean): void {
-  if (!controls.isLocked) {
+  if (!controls.isLocked || gameSession.isOver) {
     interaction.classList.add('hidden');
     return;
   }
@@ -404,6 +484,10 @@ function updateInteraction(nearFireTruck: boolean): void {
 }
 
 window.addEventListener('keydown', (event) => {
+  if (gameSession.isOver) {
+    return;
+  }
+
   keys.add(event.code);
 
   if (event.code === 'KeyR' && controls.isLocked && isNearFireTruck()) {
@@ -420,11 +504,13 @@ window.addEventListener('keyup', (event) => {
 });
 
 renderer.domElement.addEventListener('click', () => {
-  controls.lock();
+  if (!gameSession.isOver) {
+    controls.lock();
+  }
 });
 
 function updateMovement(delta: number): void {
-  if (!controls.isLocked) {
+  if (!controls.isLocked || gameSession.isOver) {
     return;
   }
 
@@ -456,42 +542,67 @@ function animate(): void {
   requestAnimationFrame(animate);
 
   const delta = Math.min(clock.getDelta(), 0.1);
-  updateMovement(delta);
-  fireSystem.update(delta);
-  const nearestFire = fireSystem.getNearestActivePosition(camera.position, 4);
-  const usingHose = keys.has('KeyE') && controls.isLocked;
   let extinguishing = false;
+  let dangerLevel = 0;
 
-  if (usingHose && nearestFire && !waterTank.isEmpty) {
-    const activeTime = waterTank.consume(delta);
-    extinguishing =
-      activeTime > 0 &&
-      fireSystem.extinguishNearest(
-        camera.position,
-        4,
-        activeTime * EXTINGUISH_RATE_PER_SECOND,
-      );
+  if (experienceStarted && !gameSession.isOver) {
+    updateMovement(delta);
+    fireSystem.update(delta);
+    dangerLevel = playerHealth.updateFromFirePositions(
+      camera.position,
+      fireSystem.activePositions,
+      delta,
+    );
+    houseRisk.update(housePosition, fireSystem.activePositions, delta);
+
+    if (playerHealth.isDepleted) {
+      endGame('player');
+    } else if (houseRisk.isBurned) {
+      house.ignite();
+      endGame('house');
+    }
+
+    if (!gameSession.isOver) {
+      const nearestFire = fireSystem.getNearestActivePosition(camera.position, 4);
+      const usingHose = keys.has('KeyE') && controls.isLocked;
+
+      if (usingHose && nearestFire && !waterTank.isEmpty) {
+        const activeTime = waterTank.consume(delta);
+        extinguishing =
+          activeTime > 0 &&
+          fireSystem.extinguishNearest(
+            camera.position,
+            4,
+            activeTime * EXTINGUISH_RATE_PER_SECOND,
+          );
+      }
+
+      hoseView.setWatering(extinguishing);
+      hoseView.update(extinguishing ? nearestFire : null);
+
+      if (performance.now() - reloadedAt < 1500) {
+        status.textContent = 'Agua recargada al 100%';
+      } else if (usingHose && waterTank.isEmpty) {
+        status.textContent = 'Sin agua · la manguera no puede apagar el fuego';
+      } else if (extinguishing) {
+        status.textContent = `Manguera activa · Focos: ${fireSystem.activeCount}`;
+      } else if (usingHose) {
+        status.textContent = `Acercate al fuego · Focos: ${fireSystem.activeCount}`;
+      } else {
+        status.textContent =
+          `Incendio en expansión · Focos: ${fireSystem.activeCount} · ` +
+          `Vegetación afectada: ${fireSystem.combustiblesIgnited}/` +
+          `${fireSystem.combustibleCount}`;
+      }
+    }
   }
 
-  hoseView.setWatering(extinguishing);
-  hoseView.update(extinguishing ? nearestFire : null);
-
-  if (performance.now() - reloadedAt < 1500) {
-    status.textContent = 'Agua recargada al 100%';
-  } else if (usingHose && waterTank.isEmpty) {
-    status.textContent = 'Sin agua · la manguera no puede apagar el fuego';
-  } else if (extinguishing) {
-    status.textContent = `Manguera activa · Focos: ${fireSystem.activeCount}`;
-  } else if (usingHose) {
-    status.textContent = `Acercate al fuego · Focos: ${fireSystem.activeCount}`;
-  } else {
-    status.textContent =
-      `Incendio en expansión · Focos: ${fireSystem.activeCount} · ` +
-      `Vegetación afectada: ${fireSystem.combustiblesIgnited}/` +
-      `${fireSystem.combustibleCount}`;
+  if (gameSession.isOver) {
+    hoseView.setWatering(false);
+    hoseView.update(null);
   }
-
   updateWaterHud();
+  updateHealthHud(dangerLevel, delta);
   updateInteraction(isNearFireTruck());
   updateEnvironmentPanel();
   marker.rotation.y += delta * 0.8;

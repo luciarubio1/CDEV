@@ -56,6 +56,21 @@ El camión de bomberos provisional se encuentra en la zona segura del noroeste d
 
 La barra vertical del lado derecho representa el agua disponible. La velocidad de consumo se puede ajustar en `src/game/player/water-tank.ts`, modificando la constante `WATER_DRAIN_PER_SECOND`: un número menor hace que el agua dure más y uno mayor, menos.
 
+## Salud y condiciones de derrota
+
+La simulación comienza al hacer clic sobre la escena. El jugador comienza con 100 puntos de salud. Cuando se acerca demasiado a un foco activo, pierde salud de forma gradual: la barra horizontal inferior izquierda cambia de verde a amarillo y rojo, mientras un viñeteado rojo aparece en los bordes de la pantalla. El efecto disminuye progresivamente al alejarse del fuego.
+
+La partida termina si la salud llega a cero, con el mensaje `El fuego te superó`. También termina si un foco activo permanece cerca de la casa el tiempo suficiente: la exposición se acumula, disminuye lentamente al alejar o apagar el fuego y, al llegar al máximo, muestra `La casa fue alcanzada por el incendio`. En ese momento la casa se oscurece y muestra llamas y humo provisionales.
+
+Tras cualquier derrota se detienen el movimiento, el consumo de agua, la extinción, el daño y la propagación. El botón `Reiniciar experiencia` recarga la página para iniciar una partida limpia.
+
+Constantes de balance ajustables:
+
+- `PLAYER_FIRE_DANGER_RADIUS` y `PLAYER_FIRE_DAMAGE_PER_SECOND` en `src/game/player/player-health.ts` controlan el radio peligroso y el daño recibido por segundo.
+- `HOUSE_FIRE_DANGER_RADIUS`, `HOUSE_EXPOSURE_TO_IGNITE` y `HOUSE_EXPOSURE_DECAY_PER_SECOND` en `src/game/world/house-risk.ts` controlan el radio, tiempo de exposición y recuperación de la casa.
+- `FIRE_SPAWN_INTERVAL` en `src/game/fire/fire-system.ts` define el intervalo entre oleadas de focos; está configurado en 6 segundos.
+- `DOUBLE_FIRE_WAVE_EVERY` define cada cuántas oleadas aparecen dos focos en posiciones distintas; está configurado en cada tercera oleada. `MAX_ACTIVE_FIRES_BEFORE_SPAWN` limita a cuatro los focos activos antes de pausar nuevas apariciones programadas.
+
 ## Funcionalidades actuales
 
 - Escena 3D con Three.js y Vite.
@@ -70,12 +85,16 @@ La barra vertical del lado derecho representa el agua disponible. La velocidad d
 - Dos frentes de incendio.
 - Llamas, humo, brasas y luz dinámica.
 - Propagación gradual hacia vegetación combustible.
+- Oleadas de focos: aparece uno cada seis segundos y, cada tercera oleada, aparecen dos en posiciones distintas con un límite de focos activos.
 - Manguera visible en primera persona.
 - Chorro de agua provisional.
 - Tanque de agua de 100 unidades y barra vertical de estado.
 - Extinción continua mientras se mantiene `E`, solo cuando hay agua y un foco dentro del radio.
 - Camión de bomberos provisional con recarga por `R`.
 - Límites de movimiento que impiden salir del terreno de 50 x 50 metros.
+- Salud del jugador con daño por cercanía al fuego y viñeteado de alerta.
+- Derrota por agotamiento de salud o por incendio acumulado de la casa.
+- Pantalla de derrota con reinicio fiable de la experiencia.
 - HUD ambiental con:
   - Cantidad de focos activos.
   - Vegetación afectada.
@@ -99,8 +118,15 @@ CDEV/
 │   │   ├── fire/
 │   │   │   ├── fire-source.ts
 │   │   │   └── fire-system.ts
-│   │   └── player/
-│   │       └── hose-view.ts
+│   │   ├── player/
+│   │   │   ├── hose-view.ts
+│   │   │   ├── player-health.ts
+│   │   │   └── water-tank.ts
+│   │   ├── world/
+│   │   │   ├── fire-truck.ts
+│   │   │   ├── house-risk.ts
+│   │   │   └── house.ts
+│   │   └── game-session.ts
 │   ├── ui/
 │   └── world/
 └── README.md
@@ -152,7 +178,7 @@ En el estado actual del prototipo:
 - El mapa es abierto.
 - El fuego puede propagarse en distintos sectores.
 - Apagar un foco evita que ese foco siga activo.
-- Todavía no se implementó el umbral final de afectación.
+- La experiencia termina si el jugador pierde toda la salud o si la casa acumula exposición crítica al incendio.
 - El camión de bomberos es una representación provisional creada con geometrías simples de Three.js.
 - La casa es actualmente un elemento de referencia visual.
 - El agua es limitada y se recarga en el camión de bomberos.
@@ -166,7 +192,7 @@ La condición final y sus umbrales se definirán antes de incorporarlos al códi
 3. Mejorar el fuego, el humo y el impacto visual sobre el entorno.
 4. Separar la lógica del mundo, el HUD y el estado del juego en módulos propios.
 5. Mejorar el modelo y la señalización del camión de bomberos.
-6. Ajustar el balance de consumo y recarga de agua después de las pruebas de juego.
+6. Ajustar el balance de agua, salud y exposición de la casa después de las pruebas de juego.
 7. Agregar audio ambiental y sonidos del incendio.
 8. Optimizar vegetación, sombras, modelos y carga de recursos.
 

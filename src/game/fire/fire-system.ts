@@ -1,6 +1,19 @@
 import * as THREE from 'three';
 import { FireSource, type FireSourceOptions } from './fire-source';
 
+export const FIRE_SPAWN_INTERVAL = 6;
+export const DOUBLE_FIRE_WAVE_EVERY = 8;
+export const MAX_ACTIVE_FIRES_BEFORE_SPAWN = 4;
+
+const scheduledFirePositions = [
+  new THREE.Vector3(-5, 0, -3),
+  new THREE.Vector3(5, 0, -4),
+  new THREE.Vector3(-6, 0, 4),
+  new THREE.Vector3(6, 0, 5),
+  new THREE.Vector3(-8, 0, -7),
+  new THREE.Vector3(3, 0, -8),
+];
+
 export interface CombustibleTarget {
   position: THREE.Vector3;
   ignitionDistance?: number;
@@ -17,6 +30,9 @@ export class FireSystem {
 
   private readonly sources: FireSource[] = [];
   private readonly targets: TrackedTarget[] = [];
+  private spawnElapsed = 0;
+  private spawnWave = 0;
+  private scheduledFireIndex = 0;
 
   addSource(options: FireSourceOptions): FireSource {
     const source = new FireSource(options);
@@ -118,6 +134,36 @@ export class FireSystem {
         }
       }
     });
+
+    this.spawnElapsed += delta;
+    if (this.spawnElapsed < FIRE_SPAWN_INTERVAL) {
+      return;
+    }
+
+    this.spawnElapsed -= FIRE_SPAWN_INTERVAL;
+    this.spawnWave += 1;
+
+    const requestedFireCount =
+      this.spawnWave % DOUBLE_FIRE_WAVE_EVERY === 0 ? 2 : 1;
+    const availableSlots = Math.max(
+      0,
+      MAX_ACTIVE_FIRES_BEFORE_SPAWN - this.activeCount,
+    );
+
+    for (let index = 0; index < Math.min(requestedFireCount, availableSlots); index += 1) {
+      this.addSource({
+        position: this.getNextScheduledFirePosition(),
+        intensity: 0.75,
+      });
+    }
+  }
+
+  private getNextScheduledFirePosition(): THREE.Vector3 {
+    const position = scheduledFirePositions[
+      this.scheduledFireIndex % scheduledFirePositions.length
+    ];
+    this.scheduledFireIndex += 1;
+    return position.clone();
   }
 
   get count(): number {
