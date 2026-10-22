@@ -28,7 +28,8 @@ canvas {
 .status,
 .interaction,
 .environment-panel,
-.water-hud {
+.water-hud,
+.health-hud {
   position: fixed;
   z-index: 1;
   border: 1px solid rgb(255 255 255 / 20%);
@@ -100,6 +101,26 @@ canvas {
   color: #bde3b3;
 }
 
+.environment-panel [data-risk='incendiada'] {
+  color: #ff754c;
+}
+
+.house-risk-meter {
+  width: 100%;
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 28%);
+}
+
+.house-risk-meter__fill {
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #ffd166, #e85d04 60%, #bd1e1e);
+  transition: width 160ms linear;
+}
+
 .interaction {
   bottom: 24px;
   left: 50%;
@@ -159,4 +180,110 @@ canvas {
 
 .water-hud.empty .water-value {
   color: #ffbd8b;
+}
+
+.health-hud {
+  bottom: 24px;
+  left: 20px;
+  display: grid;
+  width: min(58vw, 230px);
+  padding: 10px 12px;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  color: #e7f4df;
+  font-size: 12px;
+}
+
+.health-hud strong {
+  color: #ffffff;
+  font-size: 13px;
+}
+
+.health-meter {
+  height: 14px;
+  overflow: hidden;
+  border: 2px solid rgb(255 255 255 / 60%);
+  border-radius: 999px;
+  background: rgb(0 0 0 / 25%);
+}
+
+.health-meter__fill {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: #30bc14;
+  transition: width 80ms linear, background-color 160ms ease;
+}
+
+.damage-vignette {
+  position: fixed;
+  z-index: 2;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(
+    ellipse at center,
+    transparent 42%,
+    rgb(155 12 12 / 8%) 62%,
+    rgb(214 26 26 / 74%) 100%
+  );
+}
+
+.defeat-overlay {
+  position: fixed;
+  z-index: 3;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgb(7 11 8 / 78%);
+}
+
+.defeat-overlay.visible {
+  display: flex;
+}
+
+.defeat-card {
+  display: flex;
+  width: min(100%, 460px);
+  padding: 34px;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  border: 1px solid rgb(255 132 100 / 55%);
+  border-radius: 12px;
+  background: rgb(36 22 19 / 96%);
+  box-shadow: 0 12px 42px rgb(0 0 0 / 45%);
+  text-align: center;
+}
+
+.defeat-card strong {
+  color: #ffb18f;
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.defeat-card h1 {
+  margin: 0;
+  color: #ffffff;
+  font-size: clamp(26px, 5vw, 38px);
+}
+
+.defeat-card button {
+  border: 0;
+  border-radius: 6px;
+  padding: 11px 16px;
+  cursor: pointer;
+  background: #e85d04;
+  color: #ffffff;
+  font: inherit;
+  font-weight: bold;
+}
+
+.defeat-card button:hover,
+.defeat-card button:focus-visible {
+  background: #ff7420;
 }
