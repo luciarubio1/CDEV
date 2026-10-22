@@ -43,7 +43,7 @@ Este comando ejecuta el chequeo de TypeScript y genera la versión de producció
 
 ## Controles actuales
 
-- Hacer clic sobre la escena: activar el control de primera persona.
+- En el menú inicial: seleccionar `Iniciar experiencia` y luego hacer clic sobre la escena para activar el control de primera persona.
 - `W`, `A`, `S`, `D`: moverse.
 - Mouse: mirar alrededor.
 - `F` cerca de la guía: hablar y recibir la consigna inicial.
@@ -54,6 +54,14 @@ Este comando ejecuta el chequeo de TypeScript y genera la versión de producció
 - `ESC`: liberar el cursor.
 
 El flujo inicial es: hablar con la guía junto a la zona segura → preparar el equipo en el camión → combatir el incendio. Al acercarse a la guía aparece `Presioná F para hablar`. El cuadro de diálogo se cierra con `Entendido` o `Enter`; hasta entonces no se muestran ni funcionan las tareas de preparación.
+
+## Menú inicial
+
+Antes de comenzar se muestra el menú de **PRIMERA LÍNEA**, con accesos a `Iniciar experiencia`, `Controles` y `Créditos`. La simulación y el audio permanecen detenidos hasta elegir `Iniciar experiencia`; después se requiere el clic habitual sobre la escena para bloquear el cursor e iniciar la experiencia.
+
+Durante la partida, el botón `Menú` de la esquina inferior izquierda abre este mismo menú como pausa. `Continuar experiencia` reanuda la simulación sin reiniciar el progreso.
+
+El panel de créditos presenta los integrantes y roles del Grupo 8. Estos textos se pueden modificar en `src/ui/menus/main-menu.ts`, dentro de `PROJECT_CREDITS` y `TEAM_MEMBERS`.
 
 Después de la consigna hay que completar, en este orden y junto al camión, tres tareas de preparación: equiparse el traje, retirar la manguera y conectarla al camión. Los puntos son visibles en la escena y el checklist indica el progreso. Hasta completar la tercera tarea, `E` no funciona, la manguera permanece oculta, `R` no recarga y no se actualizan daño, riesgo de la casa, propagación ni oleadas.
 
@@ -78,7 +86,7 @@ La constante `AUDIO_VOLUMES` en `src/audio/audio-manager.ts` reúne los volúmen
 
 ## Salud y condiciones de derrota
 
-El clic sobre la escena habilita el movimiento para acercarse a la guía. La simulación de incendio comienza al terminar el diálogo y la preparación. El jugador comienza con 100 puntos de salud. Cuando se acerca demasiado a un foco activo, pierde salud de forma gradual: la barra horizontal inferior izquierda cambia de verde a amarillo y rojo, mientras un viñeteado rojo aparece en los bordes de la pantalla. El efecto disminuye progresivamente al alejarse del fuego.
+El clic sobre la escena habilita el movimiento para acercarse a la guía. La simulación de incendio comienza al terminar el diálogo y la preparación. El jugador comienza con 100 puntos de salud. Cuando se acerca demasiado a un foco activo, pierde salud de forma gradual: la barra vertical junto al indicador de agua, en la esquina inferior derecha, cambia de verde a amarillo y rojo, mientras un viñeteado rojo aparece en los bordes de la pantalla. El efecto disminuye progresivamente al alejarse del fuego.
 
 La partida termina si la salud llega a cero, con el mensaje `El fuego te superó`. También termina si un foco activo permanece cerca de la casa el tiempo suficiente: la exposición se acumula, disminuye lentamente al alejar o apagar el fuego y, al llegar al máximo, muestra `La casa fue alcanzada por el incendio`. En ese momento la casa se oscurece y muestra llamas y humo provisionales.
 
@@ -162,6 +170,8 @@ CDEV/
 │   │   │   └── house.ts
 │   │   └── game-session.ts
 │   ├── ui/
+│   │   └── menus/
+│   │       └── main-menu.ts
 │   └── world/
 └── README.md
 ```

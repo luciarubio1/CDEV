@@ -27,6 +27,7 @@ import {
 } from '../game/world/fire-truck';
 import { House } from '../game/world/house';
 import { HouseRisk } from '../game/world/house-risk';
+import { MainMenu } from '../ui/menus/main-menu';
 import './styles.css';
 
 const MAP_HALF_SIZE = 25;
@@ -42,7 +43,9 @@ if (!app) {
 const gameSession = new GameSession();
 const introDialogue = new IntroDialogue();
 const audioManager = new AudioManager();
+let experienceSelected = false;
 let experienceStarted = false;
+let gameMenuOpen = false;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xb3c7cf);
@@ -77,6 +80,7 @@ instructions.innerHTML = `
   <small>WASD para moverte · Mouse para mirar · ESC para liberar el mouse</small>
 `;
 app.appendChild(instructions);
+instructions.classList.add('hidden');
 
 const status = document.createElement('aside');
 status.className = 'status';
@@ -175,14 +179,60 @@ const defeatMessage = defeatOverlay.querySelector<HTMLHeadingElement>('h1');
 const restartButton = defeatOverlay.querySelector<HTMLButtonElement>('button');
 restartButton?.addEventListener('click', () => window.location.reload());
 
+const gameMenuButton = document.createElement('button');
+gameMenuButton.type = 'button';
+gameMenuButton.className = 'game-menu-button';
+gameMenuButton.textContent = 'Menú';
+gameMenuButton.hidden = true;
+gameMenuButton.addEventListener('click', () => openGameMenu());
+app.appendChild(gameMenuButton);
+
+const mainMenu = new MainMenu(app, {
+  onStart: beginExperience,
+  onResume: resumeExperience,
+});
+
+function beginExperience(): void {
+  experienceSelected = true;
+  instructions.classList.remove('hidden');
+  status.textContent = 'Hacé clic sobre la escena para comenzar';
+}
+
+function openGameMenu(): void {
+  if (!experienceStarted || gameSession.isOver) {
+    return;
+  }
+
+  gameMenuOpen = true;
+  keys.clear();
+  hoseView.setWatering(false);
+  audioManager.stopAllLoops();
+  gameMenuButton.hidden = true;
+  controls.unlock();
+  mainMenu.showForPause();
+}
+
+function resumeExperience(): void {
+  gameMenuOpen = false;
+  gameMenuButton.hidden = false;
+  audioManager.start();
+  controls.lock();
+}
+
 controls.addEventListener('lock', () => {
   experienceStarted = true;
   audioManager.start();
+  gameMenuButton.hidden = false;
   instructions.classList.add('hidden');
 });
 
 controls.addEventListener('unlock', () => {
-  if (experienceStarted && !gameSession.isOver && !introDialogue.isOpen) {
+  if (
+    experienceStarted &&
+    !gameMenuOpen &&
+    !gameSession.isOver &&
+    !introDialogue.isOpen
+  ) {
     instructions.classList.remove('hidden');
   }
 });
@@ -561,7 +611,7 @@ function updateHealthHud(dangerLevel: number, delta: number): void {
           .lerp(criticalHealthColor, (0.5 - healthRatio) * 2);
 
   if (healthFill) {
-    healthFill.style.width = `${healthRatio * 100}%`;
+    healthFill.style.height = `${healthRatio * 100}%`;
     healthFill.style.backgroundColor = `#${healthColor.getHexString()}`;
   }
   if (healthValue) {
@@ -584,6 +634,7 @@ function endGame(reason: DefeatReason): void {
   keys.clear();
   hoseView.setWatering(false);
   audioManager.playDefeatOnce();
+  gameMenuButton.hidden = true;
   controls.unlock();
   instructions.classList.add('hidden');
 
@@ -597,7 +648,7 @@ function endGame(reason: DefeatReason): void {
 }
 
 function updateInteraction(nearFireTruck: boolean): void {
-  if (!controls.isLocked || gameSession.isOver) {
+  if (!controls.isLocked || gameMenuOpen || gameSession.isOver) {
     interaction.classList.add('hidden');
     return;
   }
@@ -635,6 +686,14 @@ function updateInteraction(nearFireTruck: boolean): void {
 }
 
 window.addEventListener('keydown', (event) => {
+  if (!experienceSelected) {
+    return;
+  }
+
+  if (gameMenuOpen) {
+    return;
+  }
+
   if (event.code === 'KeyM') {
     event.preventDefault();
     showAudioStatus(audioManager.toggleMuted());
@@ -687,7 +746,7 @@ window.addEventListener('keyup', (event) => {
 });
 
 renderer.domElement.addEventListener('click', () => {
-  if (!gameSession.isOver) {
+  if (experienceSelected && !gameMenuOpen && !gameSession.isOver) {
     controls.lock();
   }
 });
@@ -696,12 +755,16 @@ renderer.domElement.addEventListener('click', () => {
 // navegador bloquee la reproducción al esperar el evento de Pointer Lock.
 renderer.domElement.addEventListener(
   'pointerdown',
-  () => audioManager.start(),
+  () => {
+    if (experienceSelected) {
+      audioManager.start();
+    }
+  },
   { once: true },
 );
 
 function updateMovement(delta: number): void {
-  if (!controls.isLocked || gameSession.isOver) {
+  if (!controls.isLocked || gameMenuOpen || gameSession.isOver) {
     return;
   }
 
@@ -736,7 +799,7 @@ function animate(): void {
   let extinguishing = false;
   let dangerLevel = 0;
 
-  if (experienceStarted && !gameSession.isOver) {
+  if (experienceStarted && !gameMenuOpen && !gameSession.isOver) {
     updateMovement(delta);
 
     if (!introDialogue.isComplete) {
@@ -812,10 +875,14 @@ function animate(): void {
   }
 
   audioManager.setTruckSiren(
-    experienceStarted && !gameSession.isOver && !preparationSequence.isComplete,
+    experienceStarted &&
+      !gameMenuOpen &&
+      !gameSession.isOver &&
+      !preparationSequence.isComplete,
   );
   if (
     experienceStarted &&
+    !gameMenuOpen &&
     !gameSession.isOver &&
     preparationSequence.isComplete
   ) {
