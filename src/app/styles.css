@@ -27,7 +27,8 @@ canvas {
 .instructions,
 .status,
 .interaction,
-.environment-panel {
+.environment-panel,
+.water-hud {
   position: fixed;
   z-index: 1;
   border: 1px solid rgb(255 255 255 / 20%);
@@ -109,4 +110,53 @@ canvas {
 
 .interaction.hidden {
   display: none;
+}
+
+.water-hud {
+  right: 20px;
+  bottom: 24px;
+  display: flex;
+  width: 78px;
+  padding: 10px;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  color: #e7f4df;
+  font-size: 12px;
+  text-align: center;
+}
+
+.water-hud strong {
+  color: #ffffff;
+  font-size: 13px;
+}
+
+.water-meter {
+  position: relative;
+  width: 24px;
+  height: 150px;
+  overflow: hidden;
+  border: 2px solid rgb(255 255 255 / 65%);
+  border-radius: 5px;
+  background: rgb(0 0 0 / 25%);
+}
+
+.water-meter__fill {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 100%;
+  background: #00a896;
+  box-shadow: 0 0 10px rgb(0 168 150 / 60%);
+  transition: height 80ms linear, background-color 160ms ease;
+}
+
+.water-hud.empty .water-meter__fill {
+  background: #64706a;
+  box-shadow: none;
+}
+
+.water-hud.empty .water-value {
+  color: #ffbd8b;
 }

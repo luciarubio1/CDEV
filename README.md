@@ -47,9 +47,14 @@ Este comando ejecuta el chequeo de TypeScript y genera la versión de producció
 - `W`, `A`, `S`, `D`: moverse.
 - Mouse: mirar alrededor.
 - `E` mantenida: utilizar la manguera y reducir gradualmente el foco más cercano.
+- `R` cerca del camión de bomberos: recargar el tanque de agua al 100%.
 - `ESC`: liberar el cursor.
 
-La manguera solo funciona dentro del radio de interacción de un foco activo. En esta versión todavía no hay tanque de agua limitado ni recarga.
+La manguera solo funciona dentro del radio de interacción de un foco activo y consume agua únicamente mientras está apagándolo. El jugador comienza con 100 unidades de agua; al agotarse, el chorro deja de apagar fuego y el HUD indica que hay que recargar.
+
+El camión de bomberos provisional se encuentra en la zona segura del noroeste del mapa. Al entrar en su radio de recarga aparece el mensaje `Presioná R para recargar agua`. La interacción elegida es una pulsación de `R`: recarga instantáneamente el tanque completo y muestra una confirmación en pantalla.
+
+La barra vertical del lado derecho representa el agua disponible. La velocidad de consumo se puede ajustar en `src/game/player/water-tank.ts`, modificando la constante `WATER_DRAIN_PER_SECOND`: un número menor hace que el agua dure más y uno mayor, menos.
 
 ## Funcionalidades actuales
 
@@ -67,7 +72,10 @@ La manguera solo funciona dentro del radio de interacción de un foco activo. En
 - Propagación gradual hacia vegetación combustible.
 - Manguera visible en primera persona.
 - Chorro de agua provisional.
-- Extinción continua mientras se mantiene `E`.
+- Tanque de agua de 100 unidades y barra vertical de estado.
+- Extinción continua mientras se mantiene `E`, solo cuando hay agua y un foco dentro del radio.
+- Camión de bomberos provisional con recarga por `R`.
+- Límites de movimiento que impiden salir del terreno de 50 x 50 metros.
 - HUD ambiental con:
   - Cantidad de focos activos.
   - Vegetación afectada.
@@ -145,9 +153,9 @@ En el estado actual del prototipo:
 - El fuego puede propagarse en distintos sectores.
 - Apagar un foco evita que ese foco siga activo.
 - Todavía no se implementó el umbral final de afectación.
-- El camión de bomberos todavía no está implementado.
+- El camión de bomberos es una representación provisional creada con geometrías simples de Three.js.
 - La casa es actualmente un elemento de referencia visual.
-- El agua todavía no está limitada ni tiene sistema de recarga.
+- El agua es limitada y se recarga en el camión de bomberos.
 
 La condición final y sus umbrales se definirán antes de incorporarlos al código.
 
@@ -157,8 +165,8 @@ La condición final y sus umbrales se definirán antes de incorporarlos al códi
 2. Reemplazar la casa provisional por un modelo con licencia compatible.
 3. Mejorar el fuego, el humo y el impacto visual sobre el entorno.
 4. Separar la lógica del mundo, el HUD y el estado del juego en módulos propios.
-5. Definir el rol del camión de bomberos.
-6. Decidir cómo funcionará el agua limitada y la recarga.
+5. Mejorar el modelo y la señalización del camión de bomberos.
+6. Ajustar el balance de consumo y recarga de agua después de las pruebas de juego.
 7. Agregar audio ambiental y sonidos del incendio.
 8. Optimizar vegetación, sombras, modelos y carga de recursos.
 
