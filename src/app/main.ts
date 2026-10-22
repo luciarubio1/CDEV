@@ -3,7 +3,17 @@ import { PointerLockControls } from 'three/addons/controls/PointerLockControls.j
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { FireSystem } from '../game/fire/fire-system';
 import { HoseView } from '../game/player/hose-view';
+import { MAX_WATER, WaterTank } from '../game/player/water-tank';
+import {
+  createFireTruck,
+  FIRE_TRUCK_POSITION,
+  FIRE_TRUCK_RELOAD_RADIUS,
+} from '../game/world/fire-truck';
 import './styles.css';
+
+const MAP_HALF_SIZE = 25;
+const PLAYER_MAP_MARGIN = 1;
+const EXTINGUISH_RATE_PER_SECOND = 0.9;
 
 const app = document.querySelector<HTMLDivElement>('#app');
 
@@ -65,6 +75,20 @@ interaction.className = 'interaction hidden';
 interaction.textContent = 'Presioná E para usar la manguera';
 app.appendChild(interaction);
 
+const waterHud = document.createElement('aside');
+waterHud.className = 'water-hud';
+waterHud.innerHTML = `
+  <strong>Agua</strong>
+  <div class="water-meter" aria-label="Nivel de agua">
+    <div class="water-meter__fill"></div>
+  </div>
+  <span class="water-value">100 / 100</span>
+`;
+app.appendChild(waterHud);
+
+const waterFill = waterHud.querySelector<HTMLDivElement>('.water-meter__fill');
+const waterValue = waterHud.querySelector<HTMLSpanElement>('.water-value');
+
 controls.addEventListener('lock', () => {
   instructions.classList.add('hidden');
 });
@@ -87,7 +111,7 @@ directionalLight.shadow.camera.bottom = -15;
 scene.add(directionalLight);
 
 const ground = new THREE.Mesh(
-  new THREE.PlaneGeometry(50, 50),
+  new THREE.PlaneGeometry(MAP_HALF_SIZE * 2, MAP_HALF_SIZE * 2),
   new THREE.MeshStandardMaterial({
     color: 0x53684a,
     roughness: 0.95,
@@ -131,6 +155,8 @@ scene.add(fireSystem.object);
 const housePosition = new THREE.Vector3(10, 0, 10);
 
 const hoseView = new HoseView(camera, scene);
+const waterTank = new WaterTank();
+scene.add(createFireTruck());
 
 const loader = new GLTFLoader();
 const modelCache = new Map<string, THREE.Object3D>();
@@ -336,12 +362,53 @@ const keys = new Set<string>();
 const movement = new THREE.Vector3();
 const direction = new THREE.Vector3();
 const clock = new THREE.Clock();
+let reloadedAt = Number.NEGATIVE_INFINITY;
+
+function isNearFireTruck(): boolean {
+  const horizontalDistance = Math.hypot(
+    camera.position.x - FIRE_TRUCK_POSITION.x,
+    camera.position.z - FIRE_TRUCK_POSITION.z,
+  );
+  return horizontalDistance <= FIRE_TRUCK_RELOAD_RADIUS;
+}
+
+function updateWaterHud(): void {
+  const percentage = (waterTank.amount / MAX_WATER) * 100;
+  if (waterFill) {
+    waterFill.style.height = `${percentage}%`;
+  }
+  if (waterValue) {
+    waterValue.textContent = `${Math.ceil(waterTank.amount)} / ${MAX_WATER}`;
+  }
+  waterHud.classList.toggle('empty', waterTank.isEmpty);
+}
+
+function updateInteraction(nearFireTruck: boolean): void {
+  if (!controls.isLocked) {
+    interaction.classList.add('hidden');
+    return;
+  }
+
+  if (nearFireTruck) {
+    interaction.textContent = 'Presioná R para recargar agua';
+  } else if (waterTank.isEmpty) {
+    interaction.textContent = 'Sin agua · acercate al camión para recargar';
+  } else if (fireSystem.activeCount > 0) {
+    interaction.textContent = 'Mantené E para usar la manguera';
+  } else {
+    interaction.classList.add('hidden');
+    return;
+  }
+
+  interaction.classList.remove('hidden');
+}
 
 window.addEventListener('keydown', (event) => {
   keys.add(event.code);
 
-  if (event.code === 'KeyE' && controls.isLocked) {
-    hoseView.setWatering(true);
+  if (event.code === 'KeyR' && controls.isLocked && isNearFireTruck()) {
+    waterTank.refill();
+    reloadedAt = performance.now();
   }
 });
 
@@ -371,8 +438,17 @@ function updateMovement(delta: number): void {
   controls.moveRight(movement.x);
   controls.moveForward(movement.z);
 
-  camera.position.x = THREE.MathUtils.clamp(camera.position.x, -23, 23);
-  camera.position.z = THREE.MathUtils.clamp(camera.position.z, -23, 23);
+  const movementLimit = MAP_HALF_SIZE - PLAYER_MAP_MARGIN;
+  camera.position.x = THREE.MathUtils.clamp(
+    camera.position.x,
+    -movementLimit,
+    movementLimit,
+  );
+  camera.position.z = THREE.MathUtils.clamp(
+    camera.position.z,
+    -movementLimit,
+    movementLimit,
+  );
   camera.position.y = 1.7;
 }
 
@@ -383,17 +459,31 @@ function animate(): void {
   updateMovement(delta);
   fireSystem.update(delta);
   const nearestFire = fireSystem.getNearestActivePosition(camera.position, 4);
-  hoseView.update(nearestFire);
+  const usingHose = keys.has('KeyE') && controls.isLocked;
+  let extinguishing = false;
 
-  if (keys.has('KeyE') && controls.isLocked) {
-    const extinguished = fireSystem.extinguishNearest(
-      camera.position,
-      4,
-      delta * 0.9,
-    );
-    status.textContent = extinguished
-      ? `Manguera activa · Focos: ${fireSystem.activeCount}`
-      : `Acercate al fuego · Focos: ${fireSystem.activeCount}`;
+  if (usingHose && nearestFire && !waterTank.isEmpty) {
+    const activeTime = waterTank.consume(delta);
+    extinguishing =
+      activeTime > 0 &&
+      fireSystem.extinguishNearest(
+        camera.position,
+        4,
+        activeTime * EXTINGUISH_RATE_PER_SECOND,
+      );
+  }
+
+  hoseView.setWatering(extinguishing);
+  hoseView.update(extinguishing ? nearestFire : null);
+
+  if (performance.now() - reloadedAt < 1500) {
+    status.textContent = 'Agua recargada al 100%';
+  } else if (usingHose && waterTank.isEmpty) {
+    status.textContent = 'Sin agua · la manguera no puede apagar el fuego';
+  } else if (extinguishing) {
+    status.textContent = `Manguera activa · Focos: ${fireSystem.activeCount}`;
+  } else if (usingHose) {
+    status.textContent = `Acercate al fuego · Focos: ${fireSystem.activeCount}`;
   } else {
     status.textContent =
       `Incendio en expansión · Focos: ${fireSystem.activeCount} · ` +
@@ -401,10 +491,8 @@ function animate(): void {
       `${fireSystem.combustibleCount}`;
   }
 
-  interaction.classList.toggle(
-    'hidden',
-    !controls.isLocked || fireSystem.activeCount === 0,
-  );
+  updateWaterHud();
+  updateInteraction(isNearFireTruck());
   updateEnvironmentPanel();
   marker.rotation.y += delta * 0.8;
   renderer.render(scene, camera);
