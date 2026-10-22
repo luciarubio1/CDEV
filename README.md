@@ -46,19 +46,39 @@ Este comando ejecuta el chequeo de TypeScript y genera la versión de producció
 - Hacer clic sobre la escena: activar el control de primera persona.
 - `W`, `A`, `S`, `D`: moverse.
 - Mouse: mirar alrededor.
+- `F` cerca de la guía: hablar y recibir la consigna inicial.
+- `F` cerca de un punto de preparación: completar la tarea indicada, después de hablar con la guía.
 - `E` mantenida: utilizar la manguera y reducir gradualmente el foco más cercano.
 - `R` cerca del camión de bomberos: recargar el tanque de agua al 100%.
+- `M`: silenciar o activar todos los sonidos.
 - `ESC`: liberar el cursor.
 
-La manguera solo funciona dentro del radio de interacción de un foco activo y consume agua únicamente mientras está apagándolo. El jugador comienza con 100 unidades de agua; al agotarse, el chorro deja de apagar fuego y el HUD indica que hay que recargar.
+El flujo inicial es: hablar con la guía junto a la zona segura → preparar el equipo en el camión → combatir el incendio. Al acercarse a la guía aparece `Presioná F para hablar`. El cuadro de diálogo se cierra con `Entendido` o `Enter`; hasta entonces no se muestran ni funcionan las tareas de preparación.
+
+Después de la consigna hay que completar, en este orden y junto al camión, tres tareas de preparación: equiparse el traje, retirar la manguera y conectarla al camión. Los puntos son visibles en la escena y el checklist indica el progreso. Hasta completar la tercera tarea, `E` no funciona, la manguera permanece oculta, `R` no recarga y no se actualizan daño, riesgo de la casa, propagación ni oleadas.
+
+Al conectar la manguera aparece el mensaje `Equipo listo. Contené el incendio.` y se habilitan todas las mecánicas de combate. La manguera solo funciona dentro del radio de interacción de un foco activo y consume agua únicamente mientras está apagándolo. El jugador comienza con 100 unidades de agua; al agotarse, el chorro deja de apagar fuego y el HUD indica que hay que recargar.
 
 El camión de bomberos provisional se encuentra en la zona segura del noroeste del mapa. Al entrar en su radio de recarga aparece el mensaje `Presioná R para recargar agua`. La interacción elegida es una pulsación de `R`: recarga instantáneamente el tanque completo y muestra una confirmación en pantalla.
 
 La barra vertical del lado derecho representa el agua disponible. La velocidad de consumo se puede ajustar en `src/game/player/water-tank.ts`, modificando la constante `WATER_DRAIN_PER_SECOND`: un número menor hace que el agua dure más y uno mayor, menos.
 
+## Audio
+
+El audio se inicia después del primer clic sobre la escena, respetando las restricciones del navegador. Los sonidos locales de `src/audio/` se controlan desde `src/audio/audio-manager.ts`:
+
+- `ambience-wind.mp3`: ambiente en loop y volumen bajo.
+- `fire-loop.mp3`: loop que aumenta al acercarse a focos activos, habilitado al terminar la preparación, y se detiene sin focos o al terminar la partida.
+- `water-spray.mp3`: loop solo mientras la manguera está extinguiendo realmente un foco.
+- `truck-refill.mp3`: efecto único al recargar junto al camión.
+- `siren.mp3`: loop de la sirena del camión durante la introducción y la preparación; se corta al conectar la manguera.
+- `defeat.mp3`: efecto único ante cualquier derrota.
+
+La constante `AUDIO_VOLUMES` en `src/audio/audio-manager.ts` reúne los volúmenes de todos los sonidos. `FIRE_AUDIO_FALLOFF_DISTANCE` controla a qué distancia el fuego alcanza su volumen mínimo.
+
 ## Salud y condiciones de derrota
 
-La simulación comienza al hacer clic sobre la escena. El jugador comienza con 100 puntos de salud. Cuando se acerca demasiado a un foco activo, pierde salud de forma gradual: la barra horizontal inferior izquierda cambia de verde a amarillo y rojo, mientras un viñeteado rojo aparece en los bordes de la pantalla. El efecto disminuye progresivamente al alejarse del fuego.
+El clic sobre la escena habilita el movimiento para acercarse a la guía. La simulación de incendio comienza al terminar el diálogo y la preparación. El jugador comienza con 100 puntos de salud. Cuando se acerca demasiado a un foco activo, pierde salud de forma gradual: la barra horizontal inferior izquierda cambia de verde a amarillo y rojo, mientras un viñeteado rojo aparece en los bordes de la pantalla. El efecto disminuye progresivamente al alejarse del fuego.
 
 La partida termina si la salud llega a cero, con el mensaje `El fuego te superó`. También termina si un foco activo permanece cerca de la casa el tiempo suficiente: la exposición se acumula, disminuye lentamente al alejar o apagar el fuego y, al llegar al máximo, muestra `La casa fue alcanzada por el incendio`. En ese momento la casa se oscurece y muestra llamas y humo provisionales.
 
@@ -68,8 +88,11 @@ Constantes de balance ajustables:
 
 - `PLAYER_FIRE_DANGER_RADIUS` y `PLAYER_FIRE_DAMAGE_PER_SECOND` en `src/game/player/player-health.ts` controlan el radio peligroso y el daño recibido por segundo.
 - `HOUSE_FIRE_DANGER_RADIUS`, `HOUSE_EXPOSURE_TO_IGNITE` y `HOUSE_EXPOSURE_DECAY_PER_SECOND` en `src/game/world/house-risk.ts` controlan el radio, tiempo de exposición y recuperación de la casa.
+- `PREPARATION_TASKS` y `PREPARATION_INTERACTION_RADIUS` en `src/game/narrative/preparation-sequence.ts` definen las posiciones, orden y radio de los tres puntos de preparación junto al camión.
+- `GUIDE_NPC_POSITION` y `GUIDE_NPC_INTERACTION_RADIUS` en `src/game/npc/guide-npc.ts` ajustan la ubicación y radio de interacción de la guía. El texto inicial y el mensaje posterior están en `src/game/narrative/intro-dialogue.ts`.
+- `AUDIO_VOLUMES` y `FIRE_AUDIO_FALLOFF_DISTANCE` en `src/audio/audio-manager.ts` controlan los niveles y el alcance del sonido de incendio.
 - `FIRE_SPAWN_INTERVAL` en `src/game/fire/fire-system.ts` define el intervalo entre oleadas de focos; está configurado en 6 segundos.
-- `DOUBLE_FIRE_WAVE_EVERY` define cada cuántas oleadas aparecen dos focos en posiciones distintas; está configurado en cada tercera oleada. `MAX_ACTIVE_FIRES_BEFORE_SPAWN` limita a cuatro los focos activos antes de pausar nuevas apariciones programadas.
+- `DOUBLE_FIRE_WAVE_EVERY` define cada cuántas oleadas aparecen dos focos en posiciones distintas. `MAX_ACTIVE_FIRES_BEFORE_SPAWN` limita a cuatro los focos activos antes de pausar nuevas apariciones programadas.
 
 ## Funcionalidades actuales
 
@@ -85,8 +108,10 @@ Constantes de balance ajustables:
 - Dos frentes de incendio.
 - Llamas, humo, brasas y luz dinámica.
 - Propagación gradual hacia vegetación combustible.
-- Oleadas de focos: aparece uno cada seis segundos y, cada tercera oleada, aparecen dos en posiciones distintas con un límite de focos activos.
+- Oleadas de focos: aparece uno cada seis segundos y, según la configuración de oleadas, aparecen dos en posiciones distintas con un límite de focos activos.
 - Manguera visible en primera persona.
+- NPC guía provisional con diálogo inicial y mensaje de orientación posterior.
+- Secuencia de preparación obligatoria con traje, manguera y conexión al camión, habilitada por la guía.
 - Chorro de agua provisional.
 - Tanque de agua de 100 unidades y barra vertical de estado.
 - Extinción continua mientras se mantiene `E`, solo cuando hay agua y un foco dentro del radio.
@@ -95,6 +120,7 @@ Constantes de balance ajustables:
 - Salud del jugador con daño por cercanía al fuego y viñeteado de alerta.
 - Derrota por agotamiento de salud o por incendio acumulado de la casa.
 - Pantalla de derrota con reinicio fiable de la experiencia.
+- Ambiente, fuego, manguera, recarga, sirena y derrota con audio contextual; `M` silencia o activa el conjunto.
 - HUD ambiental con:
   - Cantidad de focos activos.
   - Vegetación afectada.
@@ -114,6 +140,9 @@ CDEV/
 │   │   └── styles.css
 │   ├── assets/
 │   │   └── *.glb
+│   ├── audio/
+│   │   ├── audio-manager.ts
+│   │   └── *.mp3
 │   ├── game/
 │   │   ├── fire/
 │   │   │   ├── fire-source.ts
@@ -122,6 +151,11 @@ CDEV/
 │   │   │   ├── hose-view.ts
 │   │   │   ├── player-health.ts
 │   │   │   └── water-tank.ts
+│   │   ├── narrative/
+│   │   │   ├── intro-dialogue.ts
+│   │   │   └── preparation-sequence.ts
+│   │   ├── npc/
+│   │   │   └── guide-npc.ts
 │   │   ├── world/
 │   │   │   ├── fire-truck.ts
 │   │   │   ├── house-risk.ts
@@ -182,6 +216,7 @@ En el estado actual del prototipo:
 - El camión de bomberos es una representación provisional creada con geometrías simples de Three.js.
 - La casa es actualmente un elemento de referencia visual.
 - El agua es limitada y se recarga en el camión de bomberos.
+- El combate contra incendios se habilita tras hablar con la guía y completar la preparación obligatoria junto al camión.
 
 La condición final y sus umbrales se definirán antes de incorporarlos al código.
 
