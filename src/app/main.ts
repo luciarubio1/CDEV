@@ -4,6 +4,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { AudioManager } from '../audio/audio-manager';
 import { FireSystem } from '../game/fire/fire-system';
 import { GameSession, type DefeatReason } from '../game/game-session';
+import { GameStats, type GameStatsSnapshot } from '../game/game-stats';
 import { IntroDialogue } from '../game/narrative/intro-dialogue';
 import {
   PREPARATION_TASKS,
@@ -27,6 +28,7 @@ import {
 } from '../game/world/fire-truck';
 import { House } from '../game/world/house';
 import { HouseRisk } from '../game/world/house-risk';
+import { MainMenu } from '../ui/menus/main-menu';
 import './styles.css';
 
 const MAP_HALF_SIZE = 25;
@@ -40,9 +42,12 @@ if (!app) {
 }
 
 const gameSession = new GameSession();
+const gameStats = new GameStats();
 const introDialogue = new IntroDialogue();
 const audioManager = new AudioManager();
+let experienceSelected = false;
 let experienceStarted = false;
+let gameMenuOpen = false;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xb3c7cf);
@@ -77,6 +82,7 @@ instructions.innerHTML = `
   <small>WASD para moverte · Mouse para mirar · ESC para liberar el mouse</small>
 `;
 app.appendChild(instructions);
+instructions.classList.add('hidden');
 
 const status = document.createElement('aside');
 status.className = 'status';
@@ -163,26 +169,90 @@ guideDialogueButton?.addEventListener('click', () => closeGuideDialogue());
 const defeatOverlay = document.createElement('section');
 defeatOverlay.className = 'defeat-overlay';
 defeatOverlay.innerHTML = `
-  <div class="defeat-card">
+  <div class="defeat-card" role="dialog" aria-modal="true" aria-labelledby="defeat-title">
     <strong>Fin de la experiencia</strong>
-    <h1></h1>
-    <button type="button">Reiniciar experiencia</button>
+    <h1 id="defeat-title"></h1>
+    <p class="defeat-reflection"></p>
+    <section class="defeat-summary" aria-labelledby="defeat-summary-title">
+      <h2 id="defeat-summary-title">Resumen de la intervención</h2>
+      <dl>
+        <div><dt>Tiempo de supervivencia</dt><dd data-result-stat="survival"></dd></div>
+        <div><dt>Focos apagados</dt><dd data-result-stat="fires"></dd></div>
+        <div><dt>Máximo de focos activos</dt><dd data-result-stat="active-fires"></dd></div>
+        <div><dt>Oleadas iniciadas</dt><dd data-result-stat="waves"></dd></div>
+        <div><dt>Máximo riesgo de la casa</dt><dd data-result-stat="house-risk"></dd></div>
+        <div><dt>Agua utilizada</dt><dd data-result-stat="water"></dd></div>
+      </dl>
+    </section>
+    <div class="defeat-actions">
+      <button class="defeat-actions__retry" type="button">Reintentar</button>
+      <button class="defeat-actions__menu" type="button">Volver al menú</button>
+    </div>
   </div>
 `;
 app.appendChild(defeatOverlay);
 
 const defeatMessage = defeatOverlay.querySelector<HTMLHeadingElement>('h1');
-const restartButton = defeatOverlay.querySelector<HTMLButtonElement>('button');
-restartButton?.addEventListener('click', () => window.location.reload());
+const defeatReflection = defeatOverlay.querySelector<HTMLParagraphElement>('.defeat-reflection');
+const retryButton = defeatOverlay.querySelector<HTMLButtonElement>('.defeat-actions__retry');
+const returnToMenuButton = defeatOverlay.querySelector<HTMLButtonElement>('.defeat-actions__menu');
+retryButton?.addEventListener('click', () => window.location.reload());
+returnToMenuButton?.addEventListener('click', () => window.location.reload());
+
+const gameMenuButton = document.createElement('button');
+gameMenuButton.type = 'button';
+gameMenuButton.className = 'game-menu-button';
+gameMenuButton.textContent = 'Menú';
+gameMenuButton.hidden = true;
+gameMenuButton.addEventListener('click', () => openGameMenu());
+app.appendChild(gameMenuButton);
+
+const mainMenu = new MainMenu(app, {
+  onStart: beginExperience,
+  onResume: resumeExperience,
+});
+
+function beginExperience(): void {
+  experienceSelected = true;
+  instructions.classList.remove('hidden');
+  status.textContent = 'Hacé clic sobre la escena para comenzar';
+}
+
+function openGameMenu(): void {
+  if (!experienceStarted || gameSession.isOver) {
+    return;
+  }
+
+  gameMenuOpen = true;
+  keys.clear();
+  hoseView.setWatering(false);
+  audioManager.stopAllLoops();
+  gameMenuButton.hidden = true;
+  controls.unlock();
+  mainMenu.showForPause();
+}
+
+function resumeExperience(): void {
+  gameMenuOpen = false;
+  gameMenuButton.hidden = false;
+  audioManager.start();
+  controls.lock();
+}
 
 controls.addEventListener('lock', () => {
   experienceStarted = true;
   audioManager.start();
+  gameMenuButton.hidden = false;
   instructions.classList.add('hidden');
 });
 
 controls.addEventListener('unlock', () => {
-  if (experienceStarted && !gameSession.isOver && !introDialogue.isOpen) {
+  if (
+    experienceStarted &&
+    !gameMenuOpen &&
+    !gameSession.isOver &&
+    !introDialogue.isOpen
+  ) {
     instructions.classList.remove('hidden');
   }
 });
@@ -561,7 +631,7 @@ function updateHealthHud(dangerLevel: number, delta: number): void {
           .lerp(criticalHealthColor, (0.5 - healthRatio) * 2);
 
   if (healthFill) {
-    healthFill.style.width = `${healthRatio * 100}%`;
+    healthFill.style.height = `${healthRatio * 100}%`;
     healthFill.style.backgroundColor = `#${healthColor.getHexString()}`;
   }
   if (healthValue) {
@@ -579,11 +649,61 @@ function updateHealthHud(dangerLevel: number, delta: number): void {
   damageVignette.style.opacity = `${damageVignetteOpacity}`;
 }
 
+function recordCurrentStats(): void {
+  gameStats.recordFireState(
+    fireSystem.activeCount,
+    fireSystem.extinguishedCount,
+    fireSystem.wavesStarted,
+  );
+  gameStats.recordHouseRisk(houseRisk.exposureRatio);
+  gameStats.recordWaterUsage(waterTank.totalConsumed);
+}
+
+function formatSurvivalTime(totalSeconds: number): string {
+  const safeSeconds = Number.isFinite(totalSeconds)
+    ? Math.max(0, Math.round(totalSeconds))
+    : 0;
+  const minutes = Math.floor(safeSeconds / 60);
+  const seconds = safeSeconds % 60;
+
+  return minutes > 0
+    ? `${minutes} min ${seconds.toString().padStart(2, '0')} s`
+    : `${seconds} s`;
+}
+
+function setDefeatStat(name: string, value: string): void {
+  const stat = defeatOverlay.querySelector<HTMLElement>(
+    `[data-result-stat="${name}"]`,
+  );
+  if (stat) {
+    stat.textContent = value;
+  }
+}
+
+function updateDefeatSummary(snapshot: GameStatsSnapshot): void {
+  const safeRiskPercentage = Math.round(
+    Math.min(1, Math.max(0, snapshot.maxHouseRiskRatio)) * 100,
+  );
+
+  setDefeatStat('survival', formatSurvivalTime(snapshot.survivalSeconds));
+  setDefeatStat('fires', `${snapshot.firesExtinguished}`);
+  setDefeatStat('active-fires', `${snapshot.maxActiveFires}`);
+  setDefeatStat('waves', `${snapshot.wavesStarted}`);
+  setDefeatStat('house-risk', `${safeRiskPercentage}%`);
+  setDefeatStat('water', `${snapshot.waterUsed} unidades`);
+}
+
 function endGame(reason: DefeatReason): void {
+  if (gameSession.isOver) {
+    return;
+  }
+
+  recordCurrentStats();
   gameSession.end(reason);
   keys.clear();
   hoseView.setWatering(false);
   audioManager.playDefeatOnce();
+  gameMenuButton.hidden = true;
   controls.unlock();
   instructions.classList.add('hidden');
 
@@ -593,11 +713,19 @@ function endGame(reason: DefeatReason): void {
         ? 'El fuego te superó'
         : 'La casa fue alcanzada por el incendio';
   }
+  if (defeatReflection) {
+    defeatReflection.textContent =
+      reason === 'player'
+        ? 'La cercanía al fuego puede volver peligrosa cualquier intervención. La preparación, la distancia y el equipo adecuado ayudan a reducir la exposición.'
+        : 'La prevención y la detección temprana son claves para evitar que el fuego alcance zonas habitadas. Actuar a tiempo permite proteger más vidas y hogares.';
+  }
+  updateDefeatSummary(gameStats.snapshot());
   defeatOverlay.classList.add('visible');
+  queueMicrotask(() => retryButton?.focus());
 }
 
 function updateInteraction(nearFireTruck: boolean): void {
-  if (!controls.isLocked || gameSession.isOver) {
+  if (!controls.isLocked || gameMenuOpen || gameSession.isOver) {
     interaction.classList.add('hidden');
     return;
   }
@@ -635,6 +763,14 @@ function updateInteraction(nearFireTruck: boolean): void {
 }
 
 window.addEventListener('keydown', (event) => {
+  if (!experienceSelected) {
+    return;
+  }
+
+  if (gameMenuOpen) {
+    return;
+  }
+
   if (event.code === 'KeyM') {
     event.preventDefault();
     showAudioStatus(audioManager.toggleMuted());
@@ -687,7 +823,7 @@ window.addEventListener('keyup', (event) => {
 });
 
 renderer.domElement.addEventListener('click', () => {
-  if (!gameSession.isOver) {
+  if (experienceSelected && !gameMenuOpen && !gameSession.isOver) {
     controls.lock();
   }
 });
@@ -696,12 +832,16 @@ renderer.domElement.addEventListener('click', () => {
 // navegador bloquee la reproducción al esperar el evento de Pointer Lock.
 renderer.domElement.addEventListener(
   'pointerdown',
-  () => audioManager.start(),
+  () => {
+    if (experienceSelected) {
+      audioManager.start();
+    }
+  },
   { once: true },
 );
 
 function updateMovement(delta: number): void {
-  if (!controls.isLocked || gameSession.isOver) {
+  if (!controls.isLocked || gameMenuOpen || gameSession.isOver) {
     return;
   }
 
@@ -736,8 +876,10 @@ function animate(): void {
   let extinguishing = false;
   let dangerLevel = 0;
 
-  if (experienceStarted && !gameSession.isOver) {
+  if (experienceStarted && !gameMenuOpen && !gameSession.isOver) {
     updateMovement(delta);
+    gameStats.updateSurvivalTime(delta);
+    recordCurrentStats();
 
     if (!introDialogue.isComplete) {
       hoseView.setWatering(false);
@@ -753,12 +895,14 @@ function animate(): void {
           `Preparación: ${preparationSequence.currentTask?.label ?? 'completa'}`;
       } else {
         fireSystem.update(delta);
+        recordCurrentStats();
         dangerLevel = playerHealth.updateFromFirePositions(
           camera.position,
           fireSystem.activePositions,
           delta,
         );
         houseRisk.update(housePosition, fireSystem.activePositions, delta);
+        recordCurrentStats();
 
         if (playerHealth.isDepleted) {
           endGame('player');
@@ -781,6 +925,7 @@ function animate(): void {
                 activeTime * EXTINGUISH_RATE_PER_SECOND,
               );
           }
+          recordCurrentStats();
 
           hoseView.setWatering(extinguishing);
           hoseView.update(extinguishing ? nearestFire : null);
@@ -812,10 +957,14 @@ function animate(): void {
   }
 
   audioManager.setTruckSiren(
-    experienceStarted && !gameSession.isOver && !preparationSequence.isComplete,
+    experienceStarted &&
+      !gameMenuOpen &&
+      !gameSession.isOver &&
+      !preparationSequence.isComplete,
   );
   if (
     experienceStarted &&
+    !gameMenuOpen &&
     !gameSession.isOver &&
     preparationSequence.isComplete
   ) {

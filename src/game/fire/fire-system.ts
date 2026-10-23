@@ -33,6 +33,7 @@ export class FireSystem {
   private spawnElapsed = 0;
   private spawnWave = 0;
   private scheduledFireIndex = 0;
+  private extinguishedSources = 0;
 
   addSource(options: FireSourceOptions): FireSource {
     const source = new FireSource(options);
@@ -55,7 +56,11 @@ export class FireSystem {
       return false;
     }
 
+    const wasActive = source.isActive;
     source.extinguish(amount);
+    if (wasActive && !source.isActive) {
+      this.extinguishedSources += 1;
+    }
     return true;
   }
 
@@ -74,6 +79,14 @@ export class FireSystem {
 
   get activeCount(): number {
     return this.sources.filter((source) => source.isActive).length;
+  }
+
+  get extinguishedCount(): number {
+    return this.extinguishedSources;
+  }
+
+  get wavesStarted(): number {
+    return this.spawnWave;
   }
 
   get activePositions(): THREE.Vector3[] {
