@@ -90,6 +90,8 @@ El clic sobre la escena habilita el movimiento para acercarse a la guía. La sim
 
 La partida termina si la salud llega a cero, con el mensaje `El fuego te superó`. También termina si un foco activo permanece cerca de la casa el tiempo suficiente: la exposición se acumula, disminuye lentamente al alejar o apagar el fuego y, al llegar al máximo, muestra `La casa fue alcanzada por el incendio`. En ese momento la casa se oscurece y muestra llamas y humo provisionales.
 
+Al finalizar se presenta un **Resumen de la intervención** con el tiempo de supervivencia, focos apagados por completo, máximo de focos activos, oleadas iniciadas, máximo riesgo de la casa y agua total utilizada. El mensaje de reflexión cambia según el motivo de derrota. `Reintentar` y `Volver al menú` recargan una partida limpia; el segundo vuelve al menú inicial.
+
 Tras cualquier derrota se detienen el movimiento, el consumo de agua, la extinción, el daño y la propagación. El botón `Reiniciar experiencia` recarga la página para iniciar una partida limpia.
 
 Constantes de balance ajustables:
@@ -99,6 +101,7 @@ Constantes de balance ajustables:
 - `PREPARATION_TASKS` y `PREPARATION_INTERACTION_RADIUS` en `src/game/narrative/preparation-sequence.ts` definen las posiciones, orden y radio de los tres puntos de preparación junto al camión.
 - `GUIDE_NPC_POSITION` y `GUIDE_NPC_INTERACTION_RADIUS` en `src/game/npc/guide-npc.ts` ajustan la ubicación y radio de interacción de la guía. El texto inicial y el mensaje posterior están en `src/game/narrative/intro-dialogue.ts`.
 - `AUDIO_VOLUMES` y `FIRE_AUDIO_FALLOFF_DISTANCE` en `src/audio/audio-manager.ts` controlan los niveles y el alcance del sonido de incendio.
+- `GameStats` en `src/game/game-stats.ts` centraliza las métricas mostradas en el cierre de la experiencia.
 - `FIRE_SPAWN_INTERVAL` en `src/game/fire/fire-system.ts` define el intervalo entre oleadas de focos; está configurado en 6 segundos.
 - `DOUBLE_FIRE_WAVE_EVERY` define cada cuántas oleadas aparecen dos focos en posiciones distintas. `MAX_ACTIVE_FIRES_BEFORE_SPAWN` limita a cuatro los focos activos antes de pausar nuevas apariciones programadas.
 
@@ -169,6 +172,7 @@ CDEV/
 │   │   │   ├── house-risk.ts
 │   │   │   └── house.ts
 │   │   └── game-session.ts
+│   │   └── game-stats.ts
 │   ├── ui/
 │   │   └── menus/
 │   │       └── main-menu.ts

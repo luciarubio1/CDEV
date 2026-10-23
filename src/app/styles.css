@@ -351,6 +351,7 @@ canvas {
   align-items: center;
   justify-content: center;
   padding: 24px;
+  overflow-y: auto;
   background: rgb(7 11 8 / 78%);
 }
 
@@ -360,22 +361,23 @@ canvas {
 
 .defeat-card {
   display: flex;
-  width: min(100%, 460px);
-  padding: 34px;
+  width: min(100%, 680px);
+  margin: auto;
+  padding: clamp(26px, 5vw, 38px);
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
   gap: 18px;
   border: 1px solid rgb(255 132 100 / 55%);
   border-radius: 12px;
-  background: rgb(36 22 19 / 96%);
+  background: rgb(27 24 22 / 97%);
   box-shadow: 0 12px 42px rgb(0 0 0 / 45%);
-  text-align: center;
 }
 
 .defeat-card strong {
   color: #ffb18f;
   font-size: 14px;
   letter-spacing: 0.08em;
+  text-align: center;
   text-transform: uppercase;
 }
 
@@ -383,22 +385,83 @@ canvas {
   margin: 0;
   color: #ffffff;
   font-size: clamp(26px, 5vw, 38px);
+  text-align: center;
 }
 
-.defeat-card button {
+.defeat-reflection {
+  margin: 0;
+  color: #e3e7e1;
+  font-size: 16px;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.defeat-summary {
+  padding: 18px;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 9px;
+  background: rgb(0 0 0 / 18%);
+}
+
+.defeat-summary h2 {
+  margin: 0 0 14px;
+  color: #ffcf68;
+  font-size: 16px;
+}
+
+.defeat-summary dl {
+  display: grid;
+  margin: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.defeat-summary dl div {
+  display: flex;
+  min-width: 0;
+  padding: 10px;
+  flex-direction: column;
+  gap: 4px;
+  border-radius: 6px;
+  background: rgb(255 255 255 / 5%);
+}
+
+.defeat-summary dt {
+  color: #b9c7c0;
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.defeat-summary dd {
+  margin: 0;
+  color: #ffffff;
+  font-size: 18px;
+  font-weight: bold;
+  overflow-wrap: anywhere;
+}
+
+.defeat-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.defeat-actions button {
   border: 0;
   border-radius: 6px;
   padding: 11px 16px;
   cursor: pointer;
-  background: #e85d04;
+  background: #008f84;
   color: #ffffff;
   font: inherit;
   font-weight: bold;
 }
 
-.defeat-card button:hover,
-.defeat-card button:focus-visible {
-  background: #ff7420;
+.defeat-actions button:hover,
+.defeat-actions button:focus-visible {
+  background: #00a896;
+  outline: 2px solid #bdf5ee;
+  outline-offset: 2px;
 }
 
 .main-menu {
@@ -617,5 +680,22 @@ canvas {
   .main-menu__controls-list div {
     grid-template-columns: 78px 1fr;
     gap: 8px;
+  }
+
+  .defeat-overlay {
+    align-items: flex-start;
+    padding: 14px;
+  }
+
+  .defeat-summary dl {
+    grid-template-columns: 1fr;
+  }
+
+  .defeat-actions {
+    flex-direction: column;
+  }
+
+  .defeat-actions button {
+    width: 100%;
   }
 }

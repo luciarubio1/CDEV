@@ -3,6 +3,7 @@ export const WATER_DRAIN_PER_SECOND = 10;
 
 export class WaterTank {
   private currentWater = MAX_WATER;
+  private consumedWater = 0;
 
   get amount(): number {
     return this.currentWater;
@@ -10,6 +11,10 @@ export class WaterTank {
 
   get isEmpty(): boolean {
     return this.currentWater <= 0;
+  }
+
+  get totalConsumed(): number {
+    return this.consumedWater;
   }
 
   /**
@@ -24,6 +29,7 @@ export class WaterTank {
       0,
       this.currentWater - activeTime * WATER_DRAIN_PER_SECOND,
     );
+    this.consumedWater += activeTime * WATER_DRAIN_PER_SECOND;
     return activeTime;
   }
 
