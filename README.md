@@ -65,11 +65,107 @@ El panel de créditos presenta los integrantes y roles del Grupo 8. Estos textos
 
 Después de la consigna hay que completar, en este orden y junto al camión, tres tareas de preparación: equiparse el traje, retirar la manguera y conectarla al camión. Los puntos son visibles en la escena y el checklist indica el progreso. Hasta completar la tercera tarea, `E` no funciona, la manguera permanece oculta, `R` no recarga y no se actualizan daño, riesgo de la casa, propagación ni oleadas.
 
-Al conectar la manguera aparece el mensaje `Equipo listo. Contené el incendio.` y se habilitan todas las mecánicas de combate. La manguera solo funciona dentro del radio de interacción de un foco activo y consume agua únicamente mientras está apagándolo. El jugador comienza con 100 unidades de agua; al agotarse, el chorro deja de apagar fuego y el HUD indica que hay que recargar.
+Al conectar la manguera aparece el mensaje `Equipo listo. Contené el incendio.` y se habilitan todas las mecánicas de combate. La manguera solo funciona dentro del radio de interacción de un foco activo y consume agua únicamente mientras está apagándolo. El jugador comienza con 100 unidades de agua; al agotarse, el chorro deja de apagar fuego y el HUD indica que hay que recargar. La primera tarea de misión es apagar el foco inicial: recién entonces se habilitan las oleadas.
 
 El camión de bomberos provisional se encuentra en la zona segura del noroeste del mapa. Al entrar en su radio de recarga aparece el mensaje `Presioná R para recargar agua`. La interacción elegida es una pulsación de `R`: recarga instantáneamente el tanque completo y muestra una confirmación en pantalla.
 
 La barra vertical del lado derecho representa el agua disponible. La velocidad de consumo se puede ajustar en `src/game/player/water-tank.ts`, modificando la constante `WATER_DRAIN_PER_SECOND`: un número menor hace que el agua dure más y uno mayor, menos.
+
+## MisiÃ³n principal y victoria
+
+La experiencia tiene un objetivo finito: el brigadista en entrenamiento debe proteger la vivienda rural hasta que lleguen los refuerzos.
+
+1. HablÃ¡ con la guÃ­a y completÃ¡ traje, manguera y conexiÃ³n al camiÃ³n.
+2. Se activa el **Objetivo 1**, un foco de acceso con marcador naranja, lejos de la casa y el camiÃ³n. Apagalo por completo.
+3. SeguÃ­ el **Objetivo 2** hasta la radio celeste junto al camiÃ³n y presionÃ¡ `F` para solicitar refuerzos.
+4. Se activa el **Objetivo 3**, un foco crÃ­tico de marcador rojo cerca de la vivienda. Apagalo y esperÃ¡ a que el riesgo de la casa baje de 25%.
+5. Comienza una cuenta regresiva de 30 segundos. Durante ella pueden aparecer hasta dos focos moderados con marcadores celestes y fuera de las zonas protegidas. Si jugador y vivienda siguen a salvo, la pantalla final muestra `La vivienda fue protegida`.
+
+`MissionDirector` (`src/game/narrative/mission-director.ts`) centraliza estados, radio, focos narrativos y cuenta regresiva. Para balancear, ajustÃ¡ en ese archivo `ACCESS_FIRE_POSITION`, `CRITICAL_FIRE_POSITION`, `FINAL_HOLD_DURATION`, `FINAL_MAX_MODERATE_FIRES`, `FINAL_FIRE_POSITIONS` y `FINAL_FIRE_TIMES`.
+
+## Vida ambiental y señales de emergencia
+
+La atmósfera incorpora ceniza ambiental, aves estilizadas y balizas del camión, todos creados únicamente con geometrías de Three.js. La ceniza usa un único `THREE.Points` y un buffer reutilizado: se mueve con el viento y una fracción se concentra cerca de focos activos. Las aves son siluetas en V que vuelan lentamente y se alejan cuando un foco entra dentro de su radio de huida.
+
+Las balizas roja y ámbar del camión permanecen apagadas durante el menú, la cinemática y el diálogo inicial. Se activan al completar la preparación, alternan con luces puntuales suaves y dan un destello discreto ante focos críticos u oleadas, sin volver a reproducir la sirena.
+
+Constantes ajustables:
+
+- `AMBIENT_ASH_PARTICLE_COUNT`, `AMBIENT_ASH_SPEED` y `AMBIENT_ASH_NEAR_FIRE_RATIO` en `src/game/world/ambient-ash.ts`.
+- `AMBIENT_BIRD_COUNT`, `AMBIENT_BIRD_SPEED` y `AMBIENT_BIRD_FLEE_RADIUS` en `src/game/world/ambient-wildlife.ts`.
+- `TRUCK_BEACON_FLASH_FREQUENCY` y `TRUCK_EMERGENCY_FLASH_SECONDS` en `src/game/world/fire-truck.ts`.
+
+Para verificarlo, completá la preparación y activá un foco: observá la ceniza cerca del incendio, las aves cambiando de rumbo si están próximas y las balizas alternadas sobre el camión. Al terminar con victoria o derrota, los sistemas dejan de actualizarse y las balizas se apagan; reiniciar crea una partida y buffers nuevos.
+
+## Viento y humo dinámico
+
+El HUD muestra `Viento: flecha Dirección · Intensidad`. La flecha indica hacia dónde se desplazan el humo y las brasas. El patrón es determinístico: cambia de dirección lentamente cada cierto intervalo y, cuando ocurre, aparece una alerta breve indicando hacia dónde puede avanzar el fuego.
+
+`src/game/world/wind-system.ts` concentra el balance: `WIND_CHANGE_INTERVAL` define la frecuencia de cambios, `WIND_TRANSITION_SECONDS` su suavidad y los preajustes `WIND_PRESETS` definen dirección e intensidad. En `src/game/fire/fire-system.ts`, `WIND_PROPAGATION_MIN_MULTIPLIER` y `WIND_PROPAGATION_MAX_MULTIPLIER` limitan el efecto sobre la exposición: el combustible a favor del viento recibe hasta un 10% más, el que está en contra hasta un 10% menos y el lateral queda cerca del valor normal.
+
+El humo y las brasas de cada foco se desplazan gradualmente con la misma dirección. El ambiente agrega solo doce partículas ligeras, por lo que el efecto permanece visible sin un costo relevante. La bitácora incorpora una nota sobre el viento después de iniciar el flujo normal, y el cierre registra la última dirección predominante y la cantidad de cambios.
+
+Para probarlo, completá el diálogo y observá el indicador durante la partida; esperá `WIND_CHANGE_INTERVAL` segundos para ver la alerta. Creá o mantené un foco activo para apreciar con mayor claridad el desplazamiento de humo y brasas.
+
+## Cinemática inicial
+
+El flujo de inicio es: **menú → cinemática → diálogo con la guía → preparación → misión**. Al seleccionar `Iniciar experiencia`, una cinemática de 12,5 segundos recorre las sierras, la zona segura, la vivienda y el foco lejano antes de abrir automáticamente el diálogo de la guía. El ambiente de viento acompaña la secuencia y la sirena suena una sola vez.
+
+Se puede omitir en cualquier momento con `Espacio` o el botón `Omitir`. Esta es la opción reducida: lleva directamente al diálogo, conserva el estado de partida limpio y no activa incendios, daño ni misión antes de completar la preparación. `M` sigue silenciando o reactivando el audio durante la cinemática.
+
+`src/game/narrative/intro-cinematic.ts` reúne `INTRO_CINEMATIC_DURATION` y la interpolación de cámara. Los planos, sus posiciones, objetivos y textos se definen como `cinematicShots` en `src/app/main.ts`; allí se pueden ajustar duración, encuadres y frases sin cambiar la lógica de la misión.
+
+## Hallazgos educativos opcionales
+
+El mapa incluye cinco descubribles opcionales: un cartel de prevención, una mochila junto al sendero, referencias de fauna en el bosque nativo, un árbol quemado y un punto de observación serrano. Al acercarse aparece `Presioná F para investigar`; el texto se abre en una tarjeta breve y el descubrible se registra una sola vez.
+
+La tarjeta detiene únicamente el movimiento del jugador para poder leerla. La simulación, la misión y los incendios continúan, por lo que los hallazgos nunca son requisito para ganar. `B` abre la **bitácora** con los textos ya descubiertos y el HUD muestra `Hallazgos: X/5`. El resumen final también conserva este dato opcional.
+
+Los textos, tipos visuales y posiciones se editan en `src/game/narrative/discoverables.ts`, dentro de `DISCOVERABLES`. Para sumar un sexto, agregá una definición con un `id` único, título, texto, posición X/Z y uno de los tipos visuales disponibles; el contador y la bitácora se actualizan automáticamente. La interfaz de tarjetas y bitácora está en `src/ui/bitacora.ts`.
+
+La prioridad de `F` es: diálogo/preparación/radio de misión y luego el descubrible más cercano. Así los hallazgos no interrumpen objetivos obligatorios.
+
+## Decisión de misión: vivienda o bosque nativo
+
+Esta sección reemplaza el paso único de Objetivo 3 documentado arriba: desde esta versión, la prioridad se decide después de la radio.
+
+Después de apagar el foco de acceso y usar la radio junto al camión, aparece una decisión obligatoria. Se puede elegir con el mouse o mediante `1` / `H` para **Priorizar la vivienda**, y `2` / `B` para **Priorizar el bosque nativo**. El panel no se puede cerrar sin elegir y pausa la partida mientras está visible.
+
+- **Ruta vivienda:** activa un foco crítico señalado en rojo cerca de la casa. Hay que apagarlo, mantener el riesgo de la vivienda por debajo de 25% y resistir la espera de refuerzos.
+- **Ruta bosque nativo:** señala en verde un sector de bosque alejado de la vivienda con dos focos críticos. Hay que extinguir ambos antes de llegar al umbral de vegetación afectada. La vivienda continúa siendo vulnerable, por lo que también puede causar derrota si se la descuida.
+
+La ruta aparece junto al objetivo en el HUD y queda registrada en el resumen final, junto con las métricas ambientales. Las dos rutas son una ficción educativa: ante un incendio real se debe avisar a los servicios de emergencia y seguir las indicaciones de las autoridades.
+
+La configuración de ambas ramas está centralizada en `src/game/narrative/mission-branch.ts`: `criticalFirePositions`, `criticalIntensity`, `finalHoldDuration`, `finalMaxModerateFires`, `finalFirePositions`, `finalFireTimes` y, para el bosque, `forestAffectedLimit` y `forestZone`. `mission-director.ts` reutiliza esa configuración para crear los focos, marcadores, espera final y victoria.
+
+Para probarlas, completá la preparación, apagá el foco de acceso y usá la radio. Elegí una rama, extinguí sus focos señalizados y mantené con vida al jugador y a la vivienda durante la cuenta regresiva. La pantalla final informa la ruta elegida; la rama de bosque también puede terminar si se supera su límite de vegetación afectada.
+
+## Escenario serrano procedural
+
+El suelo se genera sin assets externos en `src/game/world/terrain.ts`. Usa un `PlaneGeometry` subdividido, una función determinística `getTerrainHeight(x, z)` y colores por vértice para formar lomas secas, sectores ocres y manchas de suelo carbonizado. La misma función apoya al jugador, la casa, el camión, NPC, preparación, radio, focos y vegetación sobre el relieve.
+
+Los valores de apariencia se concentran en esos módulos:
+
+- `TERRAIN_MAP_HALF_SIZE`, `TERRAIN_SEGMENTS` y `TERRAIN_HEIGHT_AMPLITUDE` en `terrain.ts` controlan extensión, detalle y altura de las lomas. `FLAT_AREAS` protege las superficies de casa y camión.
+- `TERRAIN_COLORS` ajusta la paleta de suelo seco, ocre, verde apagado y ceniza.
+- `environment.ts` crea el camino entre camión y casa, zona segura, parches quemados, formaciones rocosas y sierras lejanas. Sus colores están en `ENVIRONMENT_COLORS`.
+- El cielo, la niebla de humo y las luces se ajustan al inicio de `src/app/main.ts` mediante `scene.background`, `scene.fog`, `ambientLight` y `directionalLight`.
+
+Para verificar el terreno y las colisiones: recorré las lomas con `WASD`, comprobá que la cámara conserva una altura estable sobre el suelo y probá deslizarte contra casa, camión, árboles y rocas. Las colisiones siguen resolviéndose en X/Z en `collision-system.ts`, por lo que la elevación del terreno no altera sus radios ni bloquea las interacciones.
+
+## Daño ambiental persistente
+
+Cada foco extinguido deja una cicatriz circular irregular sobre el relieve y humo gris residual. El suelo usa `getTerrainHeight` para quedar separado del terreno sin parpadeos. Los árboles, arbustos y pasto cercanos se oscurecen de forma progresiva mientras hay fuego; tras la exposición quedan quemados y no recuperan su color al apagar las llamas.
+
+`VegetationStateSystem` en `src/game/world/vegetation-state.ts` registra cada modelo vegetal, aplica estados `dry`, `burning` y `burned`, y calcula la cantidad de elementos dañados. `BurnedGroundSystem` en `src/game/world/burned-ground.ts` recibe los eventos de extinción del `FireSystem`, genera las marcas y acumula la superficie aproximada afectada. Ambas métricas aparecen en el HUD y en el resumen final.
+
+Constantes de rendimiento y aspecto:
+
+- `VEGETATION_FIRE_RADIUS`, `VEGETATION_IGNITION_SECONDS` y `VEGETATION_COLORS` controlan alcance, velocidad de daño y colores de la vegetación.
+- `BURNED_GROUND_BASE_RADIUS` ajusta el tamaño de las cicatrices; la intensidad y duración del foco las amplían moderadamente.
+- `RESIDUAL_SMOKE_DURATION`, `RESIDUAL_SMOKE_MAX_SOURCES` y `BURNED_GROUND_MAX_MARKS` limitan el humo y las marcas visibles.
+
+Para probarlo, iniciá la misión, mantené la manguera sobre un foco hasta extinguirlo y observá la marca oscura y el humo tenue. Los elementos vegetales dentro del radio del foco cambian de tono y quedan carbonizados cuando ya no hay llamas cercanas.
 
 ## Audio
 
@@ -102,10 +198,23 @@ Constantes de balance ajustables:
 - `GUIDE_NPC_POSITION` y `GUIDE_NPC_INTERACTION_RADIUS` en `src/game/npc/guide-npc.ts` ajustan la ubicación y radio de interacción de la guía. El texto inicial y el mensaje posterior están en `src/game/narrative/intro-dialogue.ts`.
 - `AUDIO_VOLUMES` y `FIRE_AUDIO_FALLOFF_DISTANCE` en `src/audio/audio-manager.ts` controlan los niveles y el alcance del sonido de incendio.
 - `GameStats` en `src/game/game-stats.ts` centraliza las métricas mostradas en el cierre de la experiencia.
-- `FIRE_SPAWN_INTERVAL` en `src/game/fire/fire-system.ts` define el intervalo entre oleadas de focos; está configurado en 6 segundos.
-- `DOUBLE_FIRE_WAVE_EVERY` define cada cuántas oleadas aparecen dos focos en posiciones distintas. `MAX_ACTIVE_FIRES_BEFORE_SPAWN` limita a cuatro los focos activos antes de pausar nuevas apariciones programadas.
+- `FIRE_SPAWN_INTERVAL` en `src/game/fire/fire-system.ts` define el intervalo entre oleadas de focos; está configurado en 18 segundos.
+- `MAX_ACTIVE_FIRES_BEFORE_SPAWN` limita a tres los focos activos, incluidos los propagados. Las zonas de exclusión junto al jugador, camión y casa se configuran en el mismo archivo.
 
 ## Funcionalidades actuales
+
+### Colisiones y ritmo de oleadas
+
+El movimiento en primera persona usa `CollisionSystem` (`src/game/world/collision-system.ts`), un sistema 2D liviano sobre el plano X/Z. La casa usa una zona rectangular, mientras que el camión, los árboles grandes y las rocas usan zonas circulares. Si el jugador intenta atravesar un objeto, el sistema conserva el eje que sigue libre para permitir deslizarse por el borde.
+
+El escenario arranca con un único foco para reducir la presión inicial. Las oleadas no avanzan durante la preparación ni al terminarla inmediatamente: se habilitan al apagar ese primer foco. Cada oleada válida muestra brevemente `Nuevo foco detectado`; no hay avisos cuando el límite de focos o una zona protegida bloquean una aparición.
+
+Valores principales para ajustar el balance:
+
+- `PLAYER_COLLISION_RADIUS` en `src/game/world/collision-system.ts`: radio personal del jugador frente a todos los obstáculos.
+- `FIRE_SPAWN_INTERVAL` en `src/game/fire/fire-system.ts`: segundos entre oleadas (valor actual: `18`).
+- `MAX_ACTIVE_FIRES_BEFORE_SPAWN` en el mismo archivo: cantidad máxima de focos activos, incluso los propagados (valor actual: `3`).
+- `FIRE_SPAWN_EXCLUSION_PLAYER_RADIUS`, `FIRE_SPAWN_EXCLUSION_TRUCK_RADIUS` y `FIRE_SPAWN_EXCLUSION_HOUSE_RADIUS`: separaciones mínimas de seguridad para crear un foco.
 
 - Escena 3D con Three.js y Vite.
 - Movimiento en primera persona.
@@ -116,10 +225,10 @@ Constantes de balance ajustables:
   - Arbustos.
   - Pasto.
 - Casa provisional creada con geometría de Three.js.
-- Dos frentes de incendio.
+- Un foco inicial para introducir el combate antes de habilitar las oleadas.
 - Llamas, humo, brasas y luz dinámica.
 - Propagación gradual hacia vegetación combustible.
-- Oleadas de focos: aparece uno cada seis segundos y, según la configuración de oleadas, aparecen dos en posiciones distintas con un límite de focos activos.
+- Oleadas de focos: aparece uno cada 18 segundos después de apagar el foco inicial, con zonas de exclusión y un límite de tres focos activos.
 - Manguera visible en primera persona.
 - NPC guía provisional con diálogo inicial y mensaje de orientación posterior.
 - Secuencia de preparación obligatoria con traje, manguera y conexión al camión, habilitada por la guía.

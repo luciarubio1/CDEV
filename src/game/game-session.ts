@@ -1,19 +1,30 @@
-export type DefeatReason = 'player' | 'house';
+export type DefeatReason = 'player' | 'house' | 'forest';
+export type GameResult = DefeatReason | 'victory';
 
 export class GameSession {
-  private defeat: DefeatReason | null = null;
+  private result: GameResult | null = null;
 
   get isOver(): boolean {
-    return this.defeat !== null;
+    return this.result !== null;
   }
 
   get defeatReason(): DefeatReason | null {
-    return this.defeat;
+    return this.result === 'victory' ? null : this.result;
+  }
+
+  get isVictory(): boolean {
+    return this.result === 'victory';
   }
 
   end(reason: DefeatReason): void {
-    if (!this.defeat) {
-      this.defeat = reason;
+    if (!this.result) {
+      this.result = reason;
+    }
+  }
+
+  win(): void {
+    if (!this.result) {
+      this.result = 'victory';
     }
   }
 }

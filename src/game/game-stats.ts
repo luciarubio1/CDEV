@@ -5,6 +5,12 @@ export interface GameStatsSnapshot {
   wavesStarted: number;
   maxHouseRiskRatio: number;
   waterUsed: number;
+  vegetationBurned: number;
+  affectedSurfaceArea: number;
+  missionRoute: string;
+  discoveriesFound: number;
+  predominantWind: string;
+  windChanges: number;
 }
 
 function nonNegativeFinite(value: number): number {
@@ -18,6 +24,12 @@ export class GameStats {
   private wavesStarted = 0;
   private maxHouseRiskRatio = 0;
   private waterUsed = 0;
+  private vegetationBurned = 0;
+  private affectedSurfaceArea = 0;
+  private missionRoute = 'Sin elegir';
+  private discoveriesFound = 0;
+  private predominantWind = 'Norte';
+  private windChanges = 0;
 
   updateSurvivalTime(delta: number): void {
     this.survivalSeconds += nonNegativeFinite(delta);
@@ -51,6 +63,24 @@ export class GameStats {
     this.waterUsed = Math.max(this.waterUsed, nonNegativeFinite(totalWaterUsed));
   }
 
+  recordEnvironmentalDamage(vegetationBurned: number, affectedSurfaceArea: number): void {
+    this.vegetationBurned = Math.max(this.vegetationBurned, Math.floor(nonNegativeFinite(vegetationBurned)));
+    this.affectedSurfaceArea = Math.max(this.affectedSurfaceArea, nonNegativeFinite(affectedSurfaceArea));
+  }
+
+  recordMissionRoute(route: string): void {
+    this.missionRoute = route;
+  }
+
+  recordDiscoveries(found: number): void {
+    this.discoveriesFound = Math.max(this.discoveriesFound, Math.floor(nonNegativeFinite(found)));
+  }
+
+  recordWind(direction: string, changes: number): void {
+    this.predominantWind = direction;
+    this.windChanges = Math.max(this.windChanges, Math.floor(nonNegativeFinite(changes)));
+  }
+
   snapshot(): GameStatsSnapshot {
     return {
       survivalSeconds: Math.round(this.survivalSeconds),
@@ -59,6 +89,12 @@ export class GameStats {
       wavesStarted: this.wavesStarted,
       maxHouseRiskRatio: this.maxHouseRiskRatio,
       waterUsed: Math.round(this.waterUsed),
+      vegetationBurned: this.vegetationBurned,
+      affectedSurfaceArea: Math.round(this.affectedSurfaceArea),
+      missionRoute: this.missionRoute,
+      discoveriesFound: this.discoveriesFound,
+      predominantWind: this.predominantWind,
+      windChanges: this.windChanges,
     };
   }
 }

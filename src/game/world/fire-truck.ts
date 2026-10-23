@@ -2,6 +2,8 @@ import * as THREE from 'three';
 
 export const FIRE_TRUCK_POSITION = new THREE.Vector3(-16, 0, 16);
 export const FIRE_TRUCK_RELOAD_RADIUS = 3.5;
+export const TRUCK_BEACON_FLASH_FREQUENCY = 2.4;
+export const TRUCK_EMERGENCY_FLASH_SECONDS = 1.4;
 
 function createMaterial(color: number): THREE.MeshStandardMaterial {
   return new THREE.MeshStandardMaterial({ color, roughness: 0.65, metalness: 0.15 });
@@ -74,4 +76,58 @@ export function createFireTruck(): THREE.Group {
   truck.rotation.y = Math.PI / 5;
   enableShadows(truck);
   return truck;
+}
+
+/** Balizas alternadas y luz puntual suave para la etapa de emergencia. */
+export class FireTruckEmergencyLights {
+  private readonly leftBeacon: THREE.Mesh;
+  private readonly rightBeacon: THREE.Mesh;
+  private readonly leftLight: THREE.PointLight;
+  private readonly rightLight: THREE.PointLight;
+  private elapsed = 0;
+  private flashRemaining = 0;
+
+  constructor(truck: THREE.Group) {
+    const red = new THREE.MeshStandardMaterial({ color: 0xcf332c, emissive: 0xa81008, emissiveIntensity: 0 });
+    const amber = new THREE.MeshStandardMaterial({ color: 0xffa51f, emissive: 0xc36a00, emissiveIntensity: 0 });
+    this.leftBeacon = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.16, 0.16, 12), red);
+    this.rightBeacon = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.16, 0.16, 12), amber);
+    this.leftBeacon.position.set(-0.58, 2.57, -1.45);
+    this.rightBeacon.position.set(0.58, 2.57, -1.45);
+    this.leftLight = new THREE.PointLight(0xe43b2f, 0, 4.2, 2);
+    this.rightLight = new THREE.PointLight(0xffaa26, 0, 4.2, 2);
+    this.leftLight.position.copy(this.leftBeacon.position);
+    this.rightLight.position.copy(this.rightBeacon.position);
+    truck.add(this.leftBeacon, this.rightBeacon, this.leftLight, this.rightLight);
+  }
+
+  triggerEmergencyFlash(): void {
+    this.flashRemaining = TRUCK_EMERGENCY_FLASH_SECONDS;
+  }
+
+  setActive(active: boolean): void {
+    if (!active) {
+      this.leftLight.intensity = 0;
+      this.rightLight.intensity = 0;
+      (this.leftBeacon.material as THREE.MeshStandardMaterial).emissiveIntensity = 0;
+      (this.rightBeacon.material as THREE.MeshStandardMaterial).emissiveIntensity = 0;
+    }
+  }
+
+  update(delta: number, active: boolean): void {
+    if (!active) {
+      this.setActive(false);
+      return;
+    }
+    this.elapsed += delta;
+    this.flashRemaining = Math.max(0, this.flashRemaining - delta);
+    const phase = Math.sin(this.elapsed * Math.PI * 2 * TRUCK_BEACON_FLASH_FREQUENCY);
+    const boost = this.flashRemaining > 0 ? 1.35 : 1;
+    const leftOn = Math.max(0, phase) * boost;
+    const rightOn = Math.max(0, -phase) * boost;
+    (this.leftBeacon.material as THREE.MeshStandardMaterial).emissiveIntensity = leftOn * 1.5;
+    (this.rightBeacon.material as THREE.MeshStandardMaterial).emissiveIntensity = rightOn * 1.5;
+    this.leftLight.intensity = leftOn * 1.25;
+    this.rightLight.intensity = rightOn * 1.25;
+  }
 }

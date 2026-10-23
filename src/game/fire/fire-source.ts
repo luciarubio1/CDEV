@@ -5,6 +5,11 @@ export interface FireSourceOptions {
   intensity?: number;
 }
 
+export interface FireWind {
+  direction: THREE.Vector3;
+  intensity: number;
+}
+
 interface FireParticle {
   sprite: THREE.Sprite;
   origin: THREE.Vector3;
@@ -48,11 +53,20 @@ export class FireSource {
   private readonly emberPhases: number[];
   private readonly light: THREE.PointLight;
   private intensity: number;
+  private readonly initialIntensity: number;
   private elapsed = 0;
   private active = true;
 
   get intensityValue(): number {
     return this.intensity;
+  }
+
+  get startingIntensity(): number {
+    return this.initialIntensity;
+  }
+
+  get activeDuration(): number {
+    return this.elapsed;
   }
 
   get isActive(): boolean {
@@ -72,6 +86,7 @@ export class FireSource {
 
   constructor(options: FireSourceOptions) {
     this.intensity = options.intensity ?? 1;
+    this.initialIntensity = this.intensity;
     this.object.position.copy(options.position);
 
     const flameTexture = createParticleTexture(
@@ -168,7 +183,7 @@ export class FireSource {
     this.object.add(this.light);
   }
 
-  update(delta: number): void {
+  update(delta: number, wind?: FireWind): void {
     if (!this.active) {
       this.object.visible = false;
       return;
@@ -176,6 +191,8 @@ export class FireSource {
 
     this.object.visible = true;
     this.elapsed += delta;
+    const windX = (wind?.direction.x ?? 0) * (wind?.intensity ?? 0);
+    const windZ = (wind?.direction.z ?? 0) * (wind?.intensity ?? 0);
     const flicker = 0.85 + Math.sin(this.elapsed * 11) * 0.1;
     this.light.intensity = 6 * this.intensity * flicker;
 
@@ -199,7 +216,8 @@ export class FireSource {
       particle.sprite.position.y =
         particle.origin.y + ((this.elapsed * particle.rise) % 1.5);
       particle.sprite.position.z =
-        particle.origin.z + Math.cos(time * 0.7) * 0.2;
+        particle.origin.z + Math.cos(time * 0.7) * 0.2 + windZ * ((this.elapsed * particle.rise) % 1.5) * 0.75;
+      particle.sprite.position.x += windX * ((this.elapsed * particle.rise) % 1.5) * 0.75;
       particle.sprite.material.opacity = 0.22 + Math.sin(time) * 0.08;
     });
 
@@ -211,6 +229,8 @@ export class FireSource {
       }
       this.emberPositions[index * 3] += Math.sin(time) * delta * 0.15;
       this.emberPositions[index * 3 + 2] += Math.cos(time) * delta * 0.15;
+      this.emberPositions[index * 3] += windX * delta * 0.45;
+      this.emberPositions[index * 3 + 2] += windZ * delta * 0.45;
     }
 
     this.embers.geometry.attributes.position.needsUpdate = true;
