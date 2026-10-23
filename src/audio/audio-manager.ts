@@ -18,7 +18,7 @@ export const AUDIO_VOLUMES = {
 export const FIRE_AUDIO_FALLOFF_DISTANCE = 22;
 
 type LoopSoundName = 'ambience' | 'fire' | 'waterSpray' | 'siren';
-type OneShotSoundName = 'truckRefill' | 'defeat';
+type OneShotSoundName = 'truckRefill' | 'defeat' | 'sirenCue';
 
 function createAudio(url: string, loop = false): HTMLAudioElement {
   const audio = new Audio(url);
@@ -38,6 +38,7 @@ export class AudioManager {
   private readonly oneShots: Record<OneShotSoundName, HTMLAudioElement> = {
     truckRefill: createAudio(truckRefillUrl),
     defeat: createAudio(defeatUrl),
+    sirenCue: createAudio(sirenUrl),
   };
   private started = false;
   private muted = false;
@@ -51,6 +52,7 @@ export class AudioManager {
     this.loops.siren.volume = AUDIO_VOLUMES.siren;
     this.oneShots.truckRefill.volume = AUDIO_VOLUMES.truckRefill;
     this.oneShots.defeat.volume = AUDIO_VOLUMES.defeat;
+    this.oneShots.sirenCue.volume = AUDIO_VOLUMES.siren;
   }
 
   get isMuted(): boolean {
@@ -112,6 +114,10 @@ export class AudioManager {
 
   playTruckRefill(): void {
     this.playOneShot('truckRefill');
+  }
+
+  playSirenCue(): void {
+    this.playOneShot('sirenCue');
   }
 
   playDefeatOnce(): void {

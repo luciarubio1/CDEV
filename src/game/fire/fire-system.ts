@@ -1,9 +1,16 @@
 import * as THREE from 'three';
 import { FireSource, type FireSourceOptions } from './fire-source';
+import type { WindState } from '../world/wind-system';
 
-export const FIRE_SPAWN_INTERVAL = 6;
-export const DOUBLE_FIRE_WAVE_EVERY = 8;
-export const MAX_ACTIVE_FIRES_BEFORE_SPAWN = 4;
+/** Balance de oleadas: modificar estos valores para cambiar el ritmo del juego. */
+export const FIRE_SPAWN_INTERVAL = 18;
+export const MAX_ACTIVE_FIRES_BEFORE_SPAWN = 3;
+export const FIRE_SPAWN_EXCLUSION_PLAYER_RADIUS = 7;
+export const FIRE_SPAWN_EXCLUSION_TRUCK_RADIUS = 6;
+export const FIRE_SPAWN_EXCLUSION_HOUSE_RADIUS = 8;
+/** Viento: bonificación máxima a favor y freno máximo en contra. */
+export const WIND_PROPAGATION_MIN_MULTIPLIER = 0.9;
+export const WIND_PROPAGATION_MAX_MULTIPLIER = 1.1;
 
 const scheduledFirePositions = [
   new THREE.Vector3(-5, 0, -3),
@@ -20,6 +27,18 @@ export interface CombustibleTarget {
   ignitionTime?: number;
 }
 
+export interface FireUpdateContext {
+  playerPosition: THREE.Vector3;
+  fireTruckPosition: THREE.Vector3;
+  housePosition: THREE.Vector3;
+  wind?: WindState;
+}
+
+export interface WaveSpawnResult {
+  wave: number;
+  spawnedCount: number;
+}
+
 interface TrackedTarget extends CombustibleTarget {
   exposure: number;
   ignited: boolean;
@@ -29,11 +48,14 @@ export class FireSystem {
   readonly object = new THREE.Group();
 
   private readonly sources: FireSource[] = [];
+  private readonly extinguishedEvents: FireSource[] = [];
   private readonly targets: TrackedTarget[] = [];
   private spawnElapsed = 0;
   private spawnWave = 0;
   private scheduledFireIndex = 0;
   private extinguishedSources = 0;
+  private waveSpawningEnabled = false;
+  private propagationEnabled = true;
 
   addSource(options: FireSourceOptions): FireSource {
     const source = new FireSource(options);
@@ -60,6 +82,7 @@ export class FireSystem {
     source.extinguish(amount);
     if (wasActive && !source.isActive) {
       this.extinguishedSources += 1;
+      this.extinguishedEvents.push(source);
     }
     return true;
   }
@@ -95,6 +118,11 @@ export class FireSystem {
       .map((source) => source.object.position.clone());
   }
 
+  /** Consume eventos de extinciÃ³n para efectos persistentes del mundo. */
+  consumeExtinguishedSources(): FireSource[] {
+    return this.extinguishedEvents.splice(0);
+  }
+
   get combustiblesIgnited(): number {
     return this.targets.filter((target) => target.ignited).length;
   }
@@ -111,10 +139,25 @@ export class FireSystem {
     });
   }
 
-  update(delta: number): void {
-    this.sources.forEach((source) => source.update(delta));
+  setWaveSpawningEnabled(enabled: boolean): void {
+    this.waveSpawningEnabled = enabled;
+  }
 
-    this.targets.forEach((target) => {
+  setPropagationEnabled(enabled: boolean): void {
+    this.propagationEnabled = enabled;
+  }
+
+  /** Registra un foco controlado como oleada para las estadÃ­sticas de misiÃ³n. */
+  addModerateWaveSource(options: FireSourceOptions): FireSource {
+    this.spawnWave += 1;
+    return this.addSource(options);
+  }
+
+  update(delta: number, context: FireUpdateContext): WaveSpawnResult | null {
+    this.sources.forEach((source) => source.update(delta, context.wind));
+
+    if (this.propagationEnabled) {
+      this.targets.forEach((target) => {
       if (target.ignited) {
         return;
       }
@@ -134,11 +177,20 @@ export class FireSystem {
         closestSource.source &&
         closestSource.distance <= ignitionDistance
       ) {
+        const windMultiplier = this.getWindPropagationMultiplier(
+          closestSource.source.object.position,
+          target.position,
+          context.wind,
+        );
         target.exposure +=
           delta * closestSource.source.intensityValue *
-          (1 - closestSource.distance / ignitionDistance);
+          (1 - closestSource.distance / ignitionDistance) * windMultiplier;
         const ignitionTime = target.ignitionTime ?? 8;
-        if (target.exposure >= ignitionTime) {
+        if (
+          target.exposure >= ignitionTime &&
+          this.activeCount < MAX_ACTIVE_FIRES_BEFORE_SPAWN &&
+          this.isSafeSpawnPosition(target.position, context)
+        ) {
           this.addSource({
             position: target.position.clone(),
             intensity: 0.85,
@@ -146,37 +198,67 @@ export class FireSystem {
           target.ignited = true;
         }
       }
-    });
+      });
+    }
+
+    if (!this.waveSpawningEnabled || this.activeCount >= MAX_ACTIVE_FIRES_BEFORE_SPAWN) {
+      return null;
+    }
 
     this.spawnElapsed += delta;
     if (this.spawnElapsed < FIRE_SPAWN_INTERVAL) {
-      return;
+      return null;
     }
 
     this.spawnElapsed -= FIRE_SPAWN_INTERVAL;
-    this.spawnWave += 1;
-
-    const requestedFireCount =
-      this.spawnWave % DOUBLE_FIRE_WAVE_EVERY === 0 ? 2 : 1;
-    const availableSlots = Math.max(
-      0,
-      MAX_ACTIVE_FIRES_BEFORE_SPAWN - this.activeCount,
-    );
-
-    for (let index = 0; index < Math.min(requestedFireCount, availableSlots); index += 1) {
-      this.addSource({
-        position: this.getNextScheduledFirePosition(),
-        intensity: 0.75,
-      });
+    const position = this.getNextScheduledFirePosition(context);
+    if (!position) {
+      return null;
     }
+
+    this.spawnWave += 1;
+    this.addSource({ position, intensity: 0.75 });
+    return { wave: this.spawnWave, spawnedCount: 1 };
   }
 
-  private getNextScheduledFirePosition(): THREE.Vector3 {
-    const position = scheduledFirePositions[
-      this.scheduledFireIndex % scheduledFirePositions.length
-    ];
-    this.scheduledFireIndex += 1;
-    return position.clone();
+  private getNextScheduledFirePosition(context: FireUpdateContext): THREE.Vector3 | null {
+    for (let index = 0; index < scheduledFirePositions.length; index += 1) {
+      const position = scheduledFirePositions[
+        this.scheduledFireIndex % scheduledFirePositions.length
+      ];
+      this.scheduledFireIndex += 1;
+      if (this.isSafeSpawnPosition(position, context)) {
+        return position.clone();
+      }
+    }
+    return null;
+  }
+
+  isSafeSpawnPosition(position: THREE.Vector3, context: FireUpdateContext): boolean {
+    return (
+      position.distanceTo(context.playerPosition) >= FIRE_SPAWN_EXCLUSION_PLAYER_RADIUS &&
+      position.distanceTo(context.fireTruckPosition) >= FIRE_SPAWN_EXCLUSION_TRUCK_RADIUS &&
+      position.distanceTo(context.housePosition) >= FIRE_SPAWN_EXCLUSION_HOUSE_RADIUS
+    );
+  }
+
+  private getWindPropagationMultiplier(
+    source: THREE.Vector3,
+    target: THREE.Vector3,
+    wind?: WindState,
+  ): number {
+    if (!wind) return 1;
+    const deltaX = target.x - source.x;
+    const deltaZ = target.z - source.z;
+    const distance = Math.hypot(deltaX, deltaZ);
+    if (distance < 0.001) return 1;
+    const alignment = (deltaX / distance) * wind.direction.x + (deltaZ / distance) * wind.direction.z;
+    const range = WIND_PROPAGATION_MAX_MULTIPLIER - 1;
+    return THREE.MathUtils.clamp(
+      1 + alignment * range * wind.intensity,
+      WIND_PROPAGATION_MIN_MULTIPLIER,
+      WIND_PROPAGATION_MAX_MULTIPLIER,
+    );
   }
 
   get count(): number {
