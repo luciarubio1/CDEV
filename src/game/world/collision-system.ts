@@ -2,6 +2,8 @@ import * as THREE from 'three';
 
 /** Radio del jugador usado para separar su punto de vista de los obstaculos. */
 export const PLAYER_COLLISION_RADIUS = 0.45;
+/** Radio de bloqueo X/Z de cada arbusto cargado en el escenario. */
+export const BUSH_COLLISION_RADIUS = 0.62;
 
 interface CircleCollider {
   type: 'circle';

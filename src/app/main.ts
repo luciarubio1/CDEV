@@ -33,7 +33,7 @@ import {
 } from '../game/world/fire-truck';
 import { House } from '../game/world/house';
 import { HouseRisk } from '../game/world/house-risk';
-import { CollisionSystem } from '../game/world/collision-system';
+import { BUSH_COLLISION_RADIUS, CollisionSystem } from '../game/world/collision-system';
 import {
   createTerrain,
   getTerrainHeight,
@@ -47,6 +47,7 @@ import { AmbientAsh } from '../game/world/ambient-ash';
 import { AmbientWildlife } from '../game/world/ambient-wildlife';
 import { MainMenu } from '../ui/menus/main-menu';
 import { Bitacora } from '../ui/bitacora';
+import { ObjectiveCompass } from '../ui/hud/objective-compass';
 import './styles.css';
 
 const MAP_HALF_SIZE = TERRAIN_MAP_HALF_SIZE;
@@ -146,11 +147,15 @@ missionHud.className = 'mission-hud hidden';
 missionHud.innerHTML = '<strong>MisiÃ³n principal</strong><span></span>';
 app.appendChild(missionHud);
 const missionObjective = missionHud.querySelector<HTMLSpanElement>('span');
+const forestDamageHud = document.createElement('small');
+forestDamageHud.className = 'forest-damage-hud hidden';
+missionHud.appendChild(forestDamageHud);
 
 const discoveriesHud = document.createElement('aside');
 discoveriesHud.className = 'discoveries-hud';
-discoveriesHud.textContent = 'Hallazgos: 0/5 · B: bitácora';
+discoveriesHud.textContent = 'Exploración opcional · Hallazgos: 0/5 · B: Bitácora';
 app.appendChild(discoveriesHud);
+const objectiveCompass = new ObjectiveCompass(app);
 
 const windHud = document.createElement('aside');
 windHud.className = 'wind-hud';
@@ -425,6 +430,8 @@ const missionDirector = new MissionDirector(
   fireSystem,
   FIRE_TRUCK_POSITION,
   getTerrainHeight,
+  (center, radius) => vegetationStateSystem.burnedCountInRadius(center, radius),
+  (center, radius) => vegetationStateSystem.affectedCountInRadius(center, radius),
 );
 scene.add(missionDirector.object);
 const preparationSequence = new PreparationSequence();
@@ -614,7 +621,11 @@ async function loadEnvironment(): Promise<void> {
         position,
         1.1 + (index % 3) * 0.2,
         index * 0.8,
-      ).then((model) => vegetationStateSystem.register(model, position, 1.4)),
+      ).then((model) => {
+        vegetationStateSystem.register(model, position, 1.4);
+        // El collider se registra con la posición final, ya apoyada en el terreno.
+        collisionSystem.addCircle(model.position, BUSH_COLLISION_RADIUS);
+      }),
     );
   });
 
@@ -704,6 +715,13 @@ let waveNoticeUntil = Number.NEGATIVE_INFINITY;
 let waveNoticeMessage = '';
 let windNoticeUntil = Number.NEGATIVE_INFINITY;
 let windNoticeMessage = '';
+let explorationNoticeUntil = Number.NEGATIVE_INFINITY;
+const explorationNotice =
+  'Q activa la guía de exploración · los indicadores celestes contienen hallazgos educativos. Acercate y presioná F para investigarlos.';
+let explorationGuideActive = false;
+let guidedDiscoverableId: DiscoverableDefinition['id'] | undefined;
+let nextExplorationGuideRefresh = Number.NEGATIVE_INFINITY;
+const navigationForward = new THREE.Vector3();
 
 function isNearFireTruck(): boolean {
   const horizontalDistance = Math.hypot(
@@ -711,6 +729,20 @@ function isNearFireTruck(): boolean {
     camera.position.z - FIRE_TRUCK_POSITION.z,
   );
   return horizontalDistance <= FIRE_TRUCK_RELOAD_RADIUS;
+}
+
+function updateExplorationGuide(force = false): DiscoverableDefinition | null {
+  if (!explorationGuideActive) return null;
+  const now = performance.now();
+  const current = discoverableSystem.getUndiscovered(guidedDiscoverableId);
+  if (force || !current || now >= nextExplorationGuideRefresh) {
+    const next = discoverableSystem.getNearestUndiscovered(camera.position);
+    guidedDiscoverableId = next?.id;
+    nextExplorationGuideRefresh = now + 500;
+    if (!next) explorationGuideActive = false;
+    return next;
+  }
+  return current;
 }
 
 function isNearGuideNpc(): boolean {
@@ -753,6 +785,7 @@ function closeGuideDialogue(): void {
   if (firstConversation) {
     preparationSequence.setAvailable(true);
     preparationChecklist.classList.remove('hidden');
+    explorationNoticeUntil = performance.now() + 6000;
     status.textContent = 'Preparación requerida · acercate al camión';
   }
 
@@ -988,8 +1021,11 @@ function updateInteraction(nearFireTruck: boolean): void {
 
   if (missionDirector.isNearRadio(camera.position)) {
     interaction.textContent = 'PresionÃ¡ F para solicitar refuerzos';
-  } else if (discoverableSystem.findNearby(camera.position)) {
-    interaction.textContent = 'Presioná F para investigar';
+  } else if (discoverableSystem.getContext(camera.position)) {
+    const discoverableContext = discoverableSystem.getContext(camera.position)!;
+    interaction.textContent = discoverableContext.withinInteractionRadius
+      ? `Presioná F para investigar: ${discoverableContext.definition.title}`
+      : `Hallazgo educativo: ${discoverableContext.definition.title}`;
   } else if (nearFireTruck) {
     interaction.textContent = 'Presioná R para recargar agua';
   } else if (waterTank.isEmpty) {
@@ -1062,6 +1098,16 @@ window.addEventListener('keydown', (event) => {
       event.preventDefault();
       closeGuideDialogue();
     }
+    return;
+  }
+
+  if (event.code === 'KeyQ' && !event.repeat) {
+    event.preventDefault();
+    explorationGuideActive = !explorationGuideActive;
+    if (!explorationGuideActive) {
+      guidedDiscoverableId = undefined;
+    }
+    updateExplorationGuide(true);
     return;
   }
 
@@ -1246,7 +1292,6 @@ function animate(): void {
             housePosition,
           },
           houseRisk.exposureRatio,
-          vegetationStateSystem.affectedCount,
         );
 
         if (playerHealth.isDepleted) {
@@ -1336,9 +1381,31 @@ function animate(): void {
   updateHealthHud(dangerLevel, delta);
   updateInteraction(isNearFireTruck());
   updateEnvironmentPanel();
+  const optionalDiscoverable = updateExplorationGuide();
+  const navigationVisible =
+    experienceStarted &&
+    !gameMenuOpen &&
+    !cinematicActive &&
+    !missionDecisionOpen &&
+    !educationalOverlayOpen &&
+    !introDialogue.isOpen &&
+    !gameSession.isOver;
+  camera.getWorldDirection(navigationForward);
+  objectiveCompass.update(
+    camera.position,
+    navigationForward,
+    missionDirector.getNavigationTarget(camera.position, housePosition),
+    optionalDiscoverable
+      ? { position: optionalDiscoverable.position, label: optionalDiscoverable.title }
+      : null,
+    navigationVisible,
+  );
   windHud.textContent = `Viento: ${windSystem.state.arrow} ${windSystem.state.name} · ${windSystem.strengthLabel}`;
-  discoveriesHud.textContent = `Hallazgos: ${discoverableSystem.foundCount}/${discoverableSystem.totalCount} · B: bitácora`;
+  discoveriesHud.textContent =
+    `Exploración opcional · Hallazgos: ${discoverableSystem.foundCount}/${discoverableSystem.totalCount} · B: Bitácora`;
   missionHud.classList.toggle('hidden', !missionDirector.isActive);
+  forestDamageHud.textContent = missionDirector.forestDamageText;
+  forestDamageHud.classList.toggle('hidden', !missionDirector.forestDamageText);
   if (missionObjective) {
     missionObjective.textContent = missionDirector.routeLabel
       ? `${missionDirector.routeLabel} · ${missionDirector.objectiveText}`
@@ -1346,6 +1413,8 @@ function animate(): void {
   }
   if (performance.now() < audioStatusUntil) {
     status.textContent = audioStatusMessage;
+  } else if (performance.now() < explorationNoticeUntil) {
+    status.textContent = explorationNotice;
   } else if (performance.now() < waveNoticeUntil) {
     status.textContent = waveNoticeMessage;
   } else if (performance.now() < windNoticeUntil) {
