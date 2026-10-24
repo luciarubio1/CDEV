@@ -101,6 +101,28 @@ export class VegetationStateSystem {
     return this.entries.length;
   }
 
+  /** Cantidad de vegetación ya quemada dentro de una zona circular en X/Z. */
+  burnedCountInRadius(center: THREE.Vector3, radius: number): number {
+    if (!Number.isFinite(center.x) || !Number.isFinite(center.z) || !Number.isFinite(radius) || radius < 0) {
+      return 0;
+    }
+    return this.entries.filter((entry) =>
+      entry.state === 'burned' &&
+      Math.hypot(entry.position.x - center.x, entry.position.z - center.z) <= radius,
+    ).length;
+  }
+
+  /** Incluye vegetación ardiendo para fijar una línea base sin daño heredado. */
+  affectedCountInRadius(center: THREE.Vector3, radius: number): number {
+    if (!Number.isFinite(center.x) || !Number.isFinite(center.z) || !Number.isFinite(radius) || radius < 0) {
+      return 0;
+    }
+    return this.entries.filter((entry) =>
+      entry.state !== 'dry' &&
+      Math.hypot(entry.position.x - center.x, entry.position.z - center.z) <= radius,
+    ).length;
+  }
+
   private applyVisualState(entry: VegetationEntry): void {
     const damage = entry.state === 'burned'
       ? 1

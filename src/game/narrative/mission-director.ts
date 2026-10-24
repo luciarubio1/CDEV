@@ -22,6 +22,13 @@ export interface MissionUpdate {
   failure: 'forest' | null;
 }
 
+/** Destino compacto consumido por el HUD, separado de sus representaciones 3D. */
+export interface MissionNavigationTarget {
+  position: THREE.Vector3;
+  label: string;
+  priority: number;
+}
+
 function createMarker(color: number): THREE.Group {
   const marker = new THREE.Group();
   const beam = new THREE.Mesh(
@@ -106,11 +113,16 @@ export class MissionDirector {
   private moderateFiresSpawned = 0;
   private notification = '';
   private notificationRemaining = 0;
+  private forestDamageBaseline = 0;
+  private forestDamage = 0;
+  private forestDamageCheckArmed = false;
 
   constructor(
     private readonly fireSystem: FireSystem,
     truckPosition: THREE.Vector3,
     private readonly getTerrainHeight: (x: number, z: number) => number,
+    private readonly getForestBurnedCount: (center: THREE.Vector3, radius: number) => number,
+    private readonly getForestAffectedCount: (center: THREE.Vector3, radius: number) => number,
   ) {
     this.radioPosition = truckPosition.clone().add(new THREE.Vector3(3.4, 0, -1));
     this.radioPosition.y = this.getTerrainHeight(this.radioPosition.x, this.radioPosition.z);
@@ -139,6 +151,39 @@ export class MissionDirector {
   get routeLabel(): string { return this.branch?.hudLabel ?? ''; }
   get victoryTitle(): string { return this.branch?.victoryTitle ?? 'Misión cumplida'; }
   get victoryReflection(): string { return this.branch?.victoryReflection ?? ''; }
+  get forestDamageText(): string {
+    if (this.branch?.route !== 'forest') return '';
+    const limit = this.forestDamageLimit;
+    return `Bosque protegido: ${this.forestDamage}/${limit} áreas afectadas`;
+  }
+
+  getNavigationTarget(playerPosition: THREE.Vector3, housePosition: THREE.Vector3): MissionNavigationTarget | null {
+    if (this.stage === 'access' && this.accessFire?.isActive) {
+      return this.navigationTarget(this.accessFire.object.position, 'Foco de acceso', 100);
+    }
+    if (this.stage === 'radio') {
+      return this.navigationTarget(this.radioPosition, 'Radio de refuerzos', 90);
+    }
+    if (this.stage === 'critical') {
+      const activeFire = this.criticalFires
+        .filter((source) => source.isActive)
+        .sort((first, second) =>
+          Math.hypot(first.object.position.x - playerPosition.x, first.object.position.z - playerPosition.z) -
+          Math.hypot(second.object.position.x - playerPosition.x, second.object.position.z - playerPosition.z),
+        )[0];
+      if (activeFire) {
+        const label = this.branch?.route === 'forest' ? 'Foco crítico: bosque' : 'Foco crítico: vivienda';
+        return this.navigationTarget(activeFire.object.position, label, 80);
+      }
+      if (this.branch?.route === 'forest' && this.branch.forestZone) {
+        return this.navigationTarget(this.branch.forestZone.position, 'Bosque nativo', 70);
+      }
+    }
+    if (this.stage === 'hold') {
+      return this.navigationTarget(housePosition, 'Proteger la vivienda', 60);
+    }
+    return null;
+  }
 
   startAfterPreparation(): void {
     if (this.stage !== 'idle') return;
@@ -163,6 +208,10 @@ export class MissionDirector {
     if (this.stage !== 'decision') return false;
     this.branch = getMissionBranch(route);
     this.stage = 'critical';
+    this.forestDamage = 0;
+    this.forestDamageCheckArmed = false;
+    // Incluye focos ya ardiendo para que, al apagarse, no se atribuyan a esta misión.
+    this.forestDamageBaseline = this.readForestAffectedCount(this.branch);
     this.branch.criticalFirePositions.forEach((position) => {
       this.criticalFires.push(
         this.createMissionFire(position, this.branch?.criticalIntensity ?? 1, this.branch?.markerColor ?? 0xe63946),
@@ -178,7 +227,6 @@ export class MissionDirector {
     delta: number,
     context: FireUpdateContext,
     houseRiskRatio: number,
-    vegetationAffected: number,
   ): MissionUpdate {
     this.notificationRemaining = Math.max(0, this.notificationRemaining - delta);
     this.updateMarkers(delta);
@@ -189,18 +237,20 @@ export class MissionDirector {
       this.announce('Foco de acceso contenido. Pedí refuerzos junto al camión.');
     }
 
-    if (
-      this.stage === 'critical' && this.branch?.route === 'forest' &&
-      vegetationAffected >= (this.branch.forestAffectedLimit ?? Number.POSITIVE_INFINITY)
-    ) {
-      return { victory: false, failure: 'forest' };
+    if (this.stage === 'critical' && this.branch?.route === 'forest') {
+      this.forestDamage = Math.max(0, this.readForestBurnedCount(this.branch) - this.forestDamageBaseline);
+      // La decisión siempre recibe al menos un ciclo de simulación antes de poder fallar.
+      if (this.forestDamageCheckArmed && this.forestDamage > this.forestDamageLimit) {
+        return { victory: false, failure: 'forest' };
+      }
+      this.forestDamageCheckArmed = true;
     }
 
     const criticalFiresContained =
       this.criticalFires.length > 0 && this.criticalFires.every((source) => !source.isActive);
     const routeConditionMet = this.branch?.route === 'house'
       ? houseRiskRatio < 0.25
-      : vegetationAffected < (this.branch?.forestAffectedLimit ?? Number.POSITIVE_INFINITY);
+      : this.forestDamage <= this.forestDamageLimit;
     if (this.stage === 'critical' && criticalFiresContained && routeConditionMet) {
       this.stage = 'hold';
       this.holdElapsed = 0;
@@ -260,6 +310,36 @@ export class MissionDirector {
       marker.object.visible = marker.source.isActive;
       marker.object.rotation.y += delta * 0.8;
     });
+  }
+
+  private navigationTarget(position: THREE.Vector3, label: string, priority: number): MissionNavigationTarget | null {
+    if (!Number.isFinite(position.x) || !Number.isFinite(position.z)) return null;
+    return { position: position.clone(), label, priority };
+  }
+
+  private get forestDamageLimit(): number {
+    const configuredLimit = this.branch?.forestBurnedElementLimit;
+    return Number.isFinite(configuredLimit) && configuredLimit! >= 0
+      ? Math.floor(configuredLimit!)
+      : Number.MAX_SAFE_INTEGER;
+  }
+
+  private readForestBurnedCount(branch: MissionBranchConfig): number {
+    return this.readForestVegetationCount(branch, this.getForestBurnedCount);
+  }
+
+  private readForestAffectedCount(branch: MissionBranchConfig): number {
+    return this.readForestVegetationCount(branch, this.getForestAffectedCount);
+  }
+
+  private readForestVegetationCount(
+    branch: MissionBranchConfig,
+    readCount: (center: THREE.Vector3, radius: number) => number,
+  ): number {
+    const zone = branch.forestZone;
+    if (!zone || !Number.isFinite(zone.radius) || zone.radius < 0) return 0;
+    const count = readCount(zone.position, zone.radius);
+    return Number.isFinite(count) && count >= 0 ? Math.floor(count) : 0;
   }
 
   private announce(message: string): void {

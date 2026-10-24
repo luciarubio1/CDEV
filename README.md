@@ -117,13 +117,21 @@ Se puede omitir en cualquier momento con `Espacio` o el botón `Omitir`. Esta es
 
 ## Hallazgos educativos opcionales
 
-El mapa incluye cinco descubribles opcionales: un cartel de prevención, una mochila junto al sendero, referencias de fauna en el bosque nativo, un árbol quemado y un punto de observación serrano. Al acercarse aparece `Presioná F para investigar`; el texto se abre en una tarjeta breve y el descubrible se registra una sola vez.
+El mapa incluye cinco descubribles opcionales: un cartel de prevención, una mochila junto al sendero, referencias de fauna en el bosque nativo, un árbol quemado y un punto de observación serrano. Los círculos e indicadores celestes señalan estos **hallazgos educativos**; una pequeña placa flotante los hace identificables desde media distancia. Al acercarse aparece `Hallazgo educativo: [título]` y, dentro del radio de interacción, `Presioná F para investigar: [título]`.
 
-La tarjeta detiene únicamente el movimiento del jugador para poder leerla. La simulación, la misión y los incendios continúan, por lo que los hallazgos nunca son requisito para ganar. `B` abre la **bitácora** con los textos ya descubiertos y el HUD muestra `Hallazgos: X/5`. El resumen final también conserva este dato opcional.
+La tarjeta detiene únicamente el movimiento del jugador para poder leerla. La simulación, la misión y los incendios continúan, por lo que los hallazgos nunca son requisito para ganar. `B` abre la **bitácora** con los textos ya descubiertos y el HUD permanente muestra `Exploración opcional · Hallazgos: X/5 · B: Bitácora`. El resumen final también conserva este dato opcional.
 
 Los textos, tipos visuales y posiciones se editan en `src/game/narrative/discoverables.ts`, dentro de `DISCOVERABLES`. Para sumar un sexto, agregá una definición con un `id` único, título, texto, posición X/Z y uno de los tipos visuales disponibles; el contador y la bitácora se actualizan automáticamente. La interfaz de tarjetas y bitácora está en `src/ui/bitacora.ts`.
 
 La prioridad de `F` es: diálogo/preparación/radio de misión y luego el descubrible más cercano. Así los hallazgos no interrumpen objetivos obligatorios.
+
+## Brújula y guía de objetivos
+
+Una brújula discreta en el centro superior desplaza los puntos cardinales `N`, `E`, `S` y `O` según la dirección de la cámara. Debajo muestra el próximo objetivo principal, una flecha direccional y la distancia horizontal aproximada en metros. El destino cambia automáticamente entre el foco de acceso, radio, focos críticos, zona de bosque y vivienda durante la espera de refuerzos; desaparece al completar la misión. Se oculta durante menús, cinemática, diálogos bloqueantes, bitácora y pantallas finales.
+
+`Q` activa o desactiva una guía independiente al hallazgo educativo no descubierto más cercano. Cuando está activa, aparece debajo del objetivo principal en celeste como `Hallazgo opcional: [título] · Xm`; no reemplaza ni modifica la prioridad de la misión.
+
+La lógica visual está en `src/ui/hud/objective-compass.ts`. La posición visual se ajusta desde `.objective-compass` en `src/app/styles.css` (`top`, `left`, `width` y `transform`). Los destinos principales se resuelven en `MissionDirector.getNavigationTarget`; para agregar un tipo nuevo, devolvé un objeto con `position`, `label` y `priority` para el estado de misión correspondiente.
 
 ## Decisión de misión: vivienda o bosque nativo
 
@@ -132,11 +140,11 @@ Esta sección reemplaza el paso único de Objetivo 3 documentado arriba: desde e
 Después de apagar el foco de acceso y usar la radio junto al camión, aparece una decisión obligatoria. Se puede elegir con el mouse o mediante `1` / `H` para **Priorizar la vivienda**, y `2` / `B` para **Priorizar el bosque nativo**. El panel no se puede cerrar sin elegir y pausa la partida mientras está visible.
 
 - **Ruta vivienda:** activa un foco crítico señalado en rojo cerca de la casa. Hay que apagarlo, mantener el riesgo de la vivienda por debajo de 25% y resistir la espera de refuerzos.
-- **Ruta bosque nativo:** señala en verde un sector de bosque alejado de la vivienda con dos focos críticos. Hay que extinguir ambos antes de llegar al umbral de vegetación afectada. La vivienda continúa siendo vulnerable, por lo que también puede causar derrota si se la descuida.
+- **Ruta bosque nativo:** señala en verde un sector de bosque alejado de la vivienda con dos focos críticos. Hay que extinguir ambos antes de superar el umbral de daño del sector. La vivienda continúa siendo vulnerable, por lo que también puede causar derrota si se la descuida.
 
 La ruta aparece junto al objetivo en el HUD y queda registrada en el resumen final, junto con las métricas ambientales. Las dos rutas son una ficción educativa: ante un incendio real se debe avisar a los servicios de emergencia y seguir las indicaciones de las autoridades.
 
-La configuración de ambas ramas está centralizada en `src/game/narrative/mission-branch.ts`: `criticalFirePositions`, `criticalIntensity`, `finalHoldDuration`, `finalMaxModerateFires`, `finalFirePositions`, `finalFireTimes` y, para el bosque, `forestAffectedLimit` y `forestZone`. `mission-director.ts` reutiliza esa configuración para crear los focos, marcadores, espera final y victoria.
+La configuración de ambas ramas está centralizada en `src/game/narrative/mission-branch.ts`: `criticalFirePositions`, `criticalIntensity`, `finalHoldDuration`, `finalMaxModerateFires`, `finalFirePositions`, `finalFireTimes` y, para el bosque, `forestBurnedElementLimit` y `forestZone`. La unidad del límite es la **cantidad de elementos de vegetación quemados** dentro de `forestZone`, no un contador global ni un porcentaje. Al elegir la ruta se guarda una línea base de elementos ya afectados (ardiendo o quemados); solo se cuenta la vegetación que termina quemada después dentro de esa zona. La derrota solo puede ocurrir en la etapa crítica al superar el límite. El HUD muestra `Bosque protegido: X/8 áreas afectadas`. Para ajustar el balance, cambiá `forestBurnedElementLimit` (actualmente `8`) en la rama `forest` de ese archivo.
 
 Para probarlas, completá la preparación, apagá el foco de acceso y usá la radio. Elegí una rama, extinguí sus focos señalizados y mantené con vida al jugador y a la vivienda durante la cuenta regresiva. La pantalla final informa la ruta elegida; la rama de bosque también puede terminar si se supera su límite de vegetación afectada.
 
@@ -212,6 +220,7 @@ El escenario arranca con un único foco para reducir la presión inicial. Las ol
 Valores principales para ajustar el balance:
 
 - `PLAYER_COLLISION_RADIUS` en `src/game/world/collision-system.ts`: radio personal del jugador frente a todos los obstáculos.
+- `BUSH_COLLISION_RADIUS` en `src/game/world/collision-system.ts`: radio circular de cada arbusto (`0.62`); se registra al cargar el modelo en su posición final sobre el terreno. El pasto pequeño no tiene collider.
 - `FIRE_SPAWN_INTERVAL` en `src/game/fire/fire-system.ts`: segundos entre oleadas (valor actual: `18`).
 - `MAX_ACTIVE_FIRES_BEFORE_SPAWN` en el mismo archivo: cantidad máxima de focos activos, incluso los propagados (valor actual: `3`).
 - `FIRE_SPAWN_EXCLUSION_PLAYER_RADIUS`, `FIRE_SPAWN_EXCLUSION_TRUCK_RADIUS` y `FIRE_SPAWN_EXCLUSION_HOUSE_RADIUS`: separaciones mínimas de seguridad para crear un foco.

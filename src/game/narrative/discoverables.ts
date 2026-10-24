@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 
 export const DISCOVERABLE_INTERACTION_RADIUS = 2.25;
+export const DISCOVERABLE_LABEL_RADIUS = 7;
 
 export interface DiscoverableDefinition {
   id: 'prevention' | 'preparation' | 'fauna' | 'soil' | 'community';
@@ -54,6 +55,11 @@ interface DiscoverableEntry {
   object: THREE.Group;
   marker: THREE.Mesh;
   found: boolean;
+}
+
+export interface DiscoverableContext {
+  definition: DiscoverableDefinition;
+  withinInteractionRadius: boolean;
 }
 
 function material(color: number): THREE.MeshStandardMaterial {
@@ -115,6 +121,21 @@ function createVisual(definition: DiscoverableDefinition): { object: THREE.Group
   marker.rotation.x = Math.PI / 2;
   marker.position.y = definition.kind === 'fauna' ? 0.06 : 0.14;
   object.add(marker);
+  // Placa celeste flotante: complementa el círculo del suelo sin recargar el paisaje.
+  const plaque = new THREE.Group();
+  const plaqueBack = new THREE.Mesh(
+    new THREE.BoxGeometry(0.42, 0.3, 0.045),
+    new THREE.MeshStandardMaterial({ color: 0x163d46, emissive: 0x0d2730, emissiveIntensity: 0.4 }),
+  );
+  const plaqueIcon = new THREE.Mesh(
+    new THREE.CircleGeometry(0.075, 12),
+    new THREE.MeshStandardMaterial({ color: 0x8ed1c0, emissive: 0x2a8a76, emissiveIntensity: 0.8 }),
+  );
+  plaqueIcon.position.z = -0.027;
+  plaque.add(plaqueBack, plaqueIcon);
+  plaque.position.y = definition.kind === 'fauna' ? 0.8 : 1.85;
+  plaque.rotation.y = Math.PI / 4;
+  object.add(plaque);
   object.traverse((child) => {
     if (child instanceof THREE.Mesh) {
       child.castShadow = true;
@@ -149,14 +170,26 @@ export class DiscoverableSystem {
     return this.entries.filter((entry) => entry.found).map((entry) => entry.definition);
   }
 
+  getNearestUndiscovered(position: THREE.Vector3): DiscoverableDefinition | null {
+    return this.findContext(position, Number.POSITIVE_INFINITY)?.definition ?? null;
+  }
+
+  getUndiscovered(id: DiscoverableDefinition['id'] | undefined): DiscoverableDefinition | null {
+    if (!id) return null;
+    return this.entries.find((entry) => entry.definition.id === id && !entry.found)?.definition ?? null;
+  }
+
   findNearby(position: THREE.Vector3): DiscoverableDefinition | null {
-    const entry = this.entries
-      .filter((candidate) => !candidate.found)
-      .sort((first, second) =>
-        position.distanceTo(first.object.position) - position.distanceTo(second.object.position),
-      )
-      .find((candidate) => position.distanceTo(candidate.object.position) <= DISCOVERABLE_INTERACTION_RADIUS);
-    return entry?.definition ?? null;
+    return this.findContext(position, DISCOVERABLE_INTERACTION_RADIUS)?.definition ?? null;
+  }
+
+  getContext(position: THREE.Vector3): DiscoverableContext | null {
+    const entry = this.findContext(position, DISCOVERABLE_LABEL_RADIUS);
+    if (!entry) return null;
+    return {
+      definition: entry.definition,
+      withinInteractionRadius: this.horizontalDistance(position, entry.object.position) <= DISCOVERABLE_INTERACTION_RADIUS,
+    };
   }
 
   discover(id: DiscoverableDefinition['id']): DiscoverableDefinition | null {
@@ -173,5 +206,18 @@ export class DiscoverableSystem {
       entry.marker.rotation.z += delta * 0.8;
       entry.marker.position.y = (entry.definition.kind === 'fauna' ? 0.06 : 0.14) + Math.sin(this.elapsed * 2 + index) * 0.025;
     });
+  }
+
+  private findContext(position: THREE.Vector3, radius: number): DiscoverableEntry | null {
+    return this.entries
+      .filter((candidate) => !candidate.found)
+      .sort((first, second) =>
+        this.horizontalDistance(position, first.object.position) - this.horizontalDistance(position, second.object.position),
+      )
+      .find((candidate) => this.horizontalDistance(position, candidate.object.position) <= radius) ?? null;
+  }
+
+  private horizontalDistance(first: THREE.Vector3, second: THREE.Vector3): number {
+    return Math.hypot(first.x - second.x, first.z - second.z);
   }
 }

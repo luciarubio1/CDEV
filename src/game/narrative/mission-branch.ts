@@ -14,7 +14,8 @@ export interface MissionBranchConfig {
   finalMaxModerateFires: number;
   finalFirePositions: readonly THREE.Vector3[];
   finalFireTimes: readonly number[];
-  forestAffectedLimit?: number;
+  /** Máximo de elementos de vegetación quemados tras elegir la ruta, dentro de forestZone. */
+  forestBurnedElementLimit?: number;
   forestZone?: { position: THREE.Vector3; radius: number };
   npcMessage: string;
   victoryTitle: string;
@@ -54,7 +55,7 @@ export const MISSION_BRANCHES: Record<MissionRoute, MissionBranchConfig> = {
     finalMaxModerateFires: 1,
     finalFirePositions: [new THREE.Vector3(5, 0, -12)],
     finalFireTimes: [14],
-    forestAffectedLimit: 5,
+    forestBurnedElementLimit: 8,
     forestZone: { position: new THREE.Vector3(-12, 0, -11), radius: 5.2 },
     npcMessage: 'Priorizá el bosque nativo. Contené los focos antes de que el daño a la vegetación supere el límite.',
     victoryTitle: 'El bosque nativo fue contenido',

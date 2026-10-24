@@ -121,7 +121,7 @@ canvas {
 }
 
 .mission-hud {
-  top: 16px;
+  top: 112px;
   left: 50%;
   display: flex;
   max-width: min(90vw, 420px);
@@ -146,6 +146,102 @@ canvas {
   display: none;
 }
 
+.forest-damage-hud {
+  color: #bdecc3;
+  font-size: 12px;
+  font-weight: normal;
+}
+
+.forest-damage-hud.hidden {
+  display: none;
+}
+
+.objective-compass {
+  position: fixed;
+  z-index: 2;
+  top: 16px;
+  left: 50%;
+  width: min(88vw, 330px);
+  padding: 7px 12px 9px;
+  overflow: hidden;
+  border: 1px solid rgb(203 224 213 / 34%);
+  border-radius: 8px;
+  background: rgb(16 27 21 / 82%);
+  box-shadow: 0 4px 18px rgb(0 0 0 / 25%);
+  color: #e7f4df;
+  text-align: center;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.objective-compass.hidden,
+.objective-compass__primary.hidden,
+.objective-compass__optional.hidden {
+  display: none;
+}
+
+.objective-compass__tape {
+  position: relative;
+  height: 18px;
+  overflow: hidden;
+  border-bottom: 1px solid rgb(255 255 255 / 12%);
+}
+
+.objective-compass__center {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-right: 5px solid transparent;
+  border-left: 5px solid transparent;
+  border-top: 6px solid #ffcf68;
+  transform: translateX(-50%);
+}
+
+.objective-compass__cardinal {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  color: #bed0c4;
+  font-size: 11px;
+  font-weight: bold;
+  letter-spacing: 0.12em;
+  transition: transform 100ms linear;
+}
+
+.objective-compass__primary,
+.objective-compass__optional {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin-top: 7px;
+  font-size: 12px;
+}
+
+.objective-compass__primary b,
+.objective-compass__optional i {
+  display: inline-block;
+  color: #ffcf68;
+  font-size: 14px;
+  font-style: normal;
+  line-height: 1;
+  transition: transform 100ms linear;
+}
+
+.objective-compass__optional {
+  margin-top: 5px;
+  color: #bdeee4;
+  font-size: 11px;
+}
+
+.objective-compass__optional i {
+  color: #8ed1c0;
+  font-size: 12px;
+}
+
 .discoveries-hud {
   position: fixed;
   z-index: 1;
@@ -158,6 +254,7 @@ canvas {
   box-shadow: 0 4px 18px rgb(0 0 0 / 25%);
   color: #c9eee2;
   font-size: 12px;
+  line-height: 1.35;
 }
 
 .wind-hud {
