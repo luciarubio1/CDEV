@@ -1,16 +1,17 @@
 import * as THREE from 'three';
 import { FireSource, type FireSourceOptions } from './fire-source';
 import type { WindState } from '../world/wind-system';
+import { GAME_BALANCE } from '../balance-config';
 
 /** Balance de oleadas: modificar estos valores para cambiar el ritmo del juego. */
-export const FIRE_SPAWN_INTERVAL = 18;
-export const MAX_ACTIVE_FIRES_BEFORE_SPAWN = 3;
+export const FIRE_SPAWN_INTERVAL = GAME_BALANCE.fire.waveInterval;
+export const MAX_ACTIVE_FIRES_BEFORE_SPAWN = GAME_BALANCE.fire.maxActiveFires;
 export const FIRE_SPAWN_EXCLUSION_PLAYER_RADIUS = 7;
 export const FIRE_SPAWN_EXCLUSION_TRUCK_RADIUS = 6;
 export const FIRE_SPAWN_EXCLUSION_HOUSE_RADIUS = 8;
 /** Viento: bonificación máxima a favor y freno máximo en contra. */
-export const WIND_PROPAGATION_MIN_MULTIPLIER = 0.9;
-export const WIND_PROPAGATION_MAX_MULTIPLIER = 1.1;
+export const WIND_PROPAGATION_MIN_MULTIPLIER = GAME_BALANCE.fire.propagationMinMultiplier;
+export const WIND_PROPAGATION_MAX_MULTIPLIER = GAME_BALANCE.fire.propagationMaxMultiplier;
 
 const scheduledFirePositions = [
   new THREE.Vector3(-5, 0, -3),
@@ -39,6 +40,11 @@ export interface WaveSpawnResult {
   spawnedCount: number;
 }
 
+export interface WaterHitResult {
+  hit: boolean;
+  extinguished: boolean;
+}
+
 interface TrackedTarget extends CombustibleTarget {
   exposure: number;
   ignited: boolean;
@@ -64,7 +70,7 @@ export class FireSystem {
     return source;
   }
 
-  extinguishNearest(position: THREE.Vector3, radius: number, amount: number): boolean {
+  extinguishNearest(position: THREE.Vector3, radius: number, amount: number): WaterHitResult {
     const source = this.sources
       .filter((candidate) => candidate.isActive)
       .sort(
@@ -75,16 +81,18 @@ export class FireSystem {
       .find((candidate) => candidate.object.position.distanceTo(position) <= radius);
 
     if (!source) {
-      return false;
+      return { hit: false, extinguished: false };
     }
 
     const wasActive = source.isActive;
+    source.applyWaterImpact();
     source.extinguish(amount);
-    if (wasActive && !source.isActive) {
+    const extinguished = wasActive && !source.isActive;
+    if (extinguished) {
       this.extinguishedSources += 1;
       this.extinguishedEvents.push(source);
     }
-    return true;
+    return { hit: true, extinguished };
   }
 
   getNearestActivePosition(position: THREE.Vector3, radius: number): THREE.Vector3 | null {
@@ -98,6 +106,20 @@ export class FireSystem {
       .find((candidate) => candidate.object.position.distanceTo(position) <= radius);
 
     return source ? source.object.position.clone() : null;
+  }
+
+  /** Tiempo de impacto que aún necesita el foco, para no gastar agua de más en el último frame. */
+  getRemainingImpactTime(position: THREE.Vector3, radius: number, rate: number): number {
+    let nearest: FireSource | null = null;
+    let nearestDistance = radius;
+    for (const source of this.sources) {
+      const distance = source.object.position.distanceTo(position);
+      if (source.isActive && distance <= radius && (!nearest || distance < nearestDistance)) {
+        nearest = source;
+        nearestDistance = distance;
+      }
+    }
+    return nearest && rate > 0 ? nearest.remainingResistance / rate : 0;
   }
 
   get activeCount(): number {
@@ -116,6 +138,17 @@ export class FireSystem {
     return this.sources
       .filter((source) => source.isActive)
       .map((source) => source.object.position.clone());
+  }
+
+  /** Apagado visual posterior a la misión: no incrementa las estadísticas del jugador. */
+  containByReinforcements(amount: number): void {
+    this.sources.filter((source) => source.isActive).forEach((source) => {
+      source.applyWaterImpact();
+      source.extinguish(amount);
+      if (!source.isActive) {
+        this.extinguishedEvents.push(source);
+      }
+    });
   }
 
   /** Consume eventos de extinciÃ³n para efectos persistentes del mundo. */

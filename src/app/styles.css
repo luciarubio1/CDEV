@@ -8,6 +8,18 @@
   box-sizing: border-box;
 }
 
+/* El HUD usa display:flex; respetar igualmente la ocultación por estado. */
+[hidden] { display: none !important; }
+
+.bitacora__panel a {
+  display: block;
+  margin-top: 7px;
+  color: #a9e8d5;
+  font-size: 13px;
+}
+.bitacora__panel details { margin-top: 14px; }
+.bitacora__panel summary { padding: 10px 0; color: #a9e8d5; cursor: pointer; }
+
 html,
 body,
 #app {
@@ -71,6 +83,61 @@ canvas {
   padding: 10px 14px;
   color: #e7f4df;
   font-size: 14px;
+}
+
+.containment-feedback {
+  position: fixed;
+  z-index: 3;
+  top: 92px;
+  left: 50%;
+  padding: 9px 15px;
+  border: 1px solid rgb(183 241 255 / 72%);
+  border-radius: 999px;
+  background: rgb(22 58 66 / 88%);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 28%);
+  color: #e4fbff;
+  font-size: 14px;
+  font-weight: bold;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, -6px);
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+
+.containment-feedback.visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.epilogue-panel {
+  position: fixed;
+  z-index: 3;
+  right: 16px;
+  top: 210px;
+  display: none;
+  width: min(300px, calc(100vw - 32px));
+  padding: 13px;
+  border: 1px solid rgb(142 209 192 / 62%);
+  border-radius: 9px;
+  background: rgb(16 42 38 / 91%);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 28%);
+  color: #dff8f1;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.epilogue-panel.visible { display: grid; gap: 8px; }
+.epilogue-panel strong { color: #a9f0d8; font-size: 15px; }
+.epilogue-panel button {
+  justify-self: start;
+  border: 1px solid #8ed1c0;
+  border-radius: 5px;
+  padding: 7px 10px;
+  background: #17665b;
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-weight: bold;
 }
 
 .preparation-checklist {

@@ -1,8 +1,10 @@
-export const MAX_WATER = 100;
-export const WATER_DRAIN_PER_SECOND = 10;
+import { GAME_BALANCE } from '../balance-config';
+
+export const MAX_WATER = GAME_BALANCE.water.max;
+export const WATER_DRAIN_PER_SECOND = GAME_BALANCE.water.drainPerSecond;
 
 export class WaterTank {
-  private currentWater = MAX_WATER;
+  private currentWater: number = MAX_WATER;
   private consumedWater = 0;
 
   get amount(): number {

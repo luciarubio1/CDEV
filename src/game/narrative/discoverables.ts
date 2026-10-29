@@ -4,11 +4,13 @@ export const DISCOVERABLE_INTERACTION_RADIUS = 2.25;
 export const DISCOVERABLE_LABEL_RADIUS = 7;
 
 export interface DiscoverableDefinition {
-  id: 'prevention' | 'preparation' | 'fauna' | 'soil' | 'community';
+  id: 'prevention' | 'preparation' | 'fauna' | 'soil' | 'community' | 'drought' | 'embers' | 'cigarette';
   title: string;
   text: string;
   position: THREE.Vector3;
   kind: 'sign' | 'backpack' | 'fauna' | 'burned-tree' | 'lookout';
+  category?: 'Comprender el incendio';
+  epilogueOnly?: boolean;
 }
 
 /** Textos y posiciones editables de los hallazgos opcionales. */
@@ -47,6 +49,24 @@ export const DISCOVERABLES: readonly DiscoverableDefinition[] = [
     text: 'La prevención es colectiva. Ante un incendio real, alejate de la zona, avisá a los servicios de emergencia y seguí las indicaciones de las autoridades.',
     position: new THREE.Vector3(15, 0, 14),
     kind: 'lookout',
+  },
+];
+
+export const EPILOGUE_DISCOVERABLES: readonly DiscoverableDefinition[] = [
+  {
+    id: 'drought', title: 'Sequía y vegetación seca', kind: 'sign', category: 'Comprender el incendio', epilogueOnly: true,
+    position: new THREE.Vector3(-10, 0, 11.5),
+    text: 'Condición que favorece la propagación: la falta de lluvias puede secar la vegetación, que funciona como combustible. No es, por sí sola, una fuente de ignición.',
+  },
+  {
+    id: 'embers', title: 'Brasas de un asado mal apagadas', kind: 'backpack', category: 'Comprender el incendio', epilogueOnly: true,
+    position: new THREE.Vector3(-13.5, 0, 10),
+    text: 'Posible fuente de ignición: brasas que aún conservan calor pueden iniciar un fuego al contactar vegetación seca. Esta estación no identifica una causa confirmada de esta partida.',
+  },
+  {
+    id: 'cigarette', title: 'Colilla encendida', kind: 'lookout', category: 'Comprender el incendio', epilogueOnly: true,
+    position: new THREE.Vector3(-8, 0, 15),
+    text: 'Posible fuente de ignición: una colilla encendida puede iniciar un foco bajo condiciones favorables. No toda colilla provoca un incendio, pero arrojarla encendida aumenta el riesgo.',
   },
 ];
 
@@ -152,7 +172,7 @@ export class DiscoverableSystem {
   private elapsed = 0;
 
   constructor(getTerrainHeight: (x: number, z: number) => number) {
-    this.entries = DISCOVERABLES.map((definition) => {
+    this.entries = [...DISCOVERABLES, ...EPILOGUE_DISCOVERABLES].map((definition) => {
       const visual = createVisual(definition);
       visual.object.position.set(
         definition.position.x,
@@ -160,18 +180,31 @@ export class DiscoverableSystem {
         definition.position.z,
       );
       this.object.add(visual.object);
+      visual.object.visible = !definition.epilogueOnly;
       return { definition, ...visual, found: false };
     });
   }
 
   get foundCount(): number { return this.entries.filter((entry) => entry.found).length; }
   get totalCount(): number { return this.entries.length; }
+  get epilogueFoundCount(): number { return this.entries.filter((entry) => entry.definition.epilogueOnly && entry.found).length; }
+  get epilogueTotalCount(): number { return EPILOGUE_DISCOVERABLES.length; }
+  get epilogueDiscovered(): readonly DiscoverableDefinition[] { return this.entries.filter((entry) => entry.definition.epilogueOnly && entry.found).map((entry) => entry.definition); }
   get discovered(): readonly DiscoverableDefinition[] {
     return this.entries.filter((entry) => entry.found).map((entry) => entry.definition);
   }
 
-  getNearestUndiscovered(position: THREE.Vector3): DiscoverableDefinition | null {
-    return this.findContext(position, Number.POSITIVE_INFINITY)?.definition ?? null;
+  getNearestUndiscovered(position: THREE.Vector3, epilogueOnly?: boolean): DiscoverableDefinition | null {
+    const candidates = this.entries
+      .filter((entry) => !entry.found && entry.object.visible && (epilogueOnly === undefined || entry.definition.epilogueOnly === epilogueOnly))
+      .sort((first, second) => this.horizontalDistance(position, first.object.position) - this.horizontalDistance(position, second.object.position));
+    return candidates[0]?.definition ?? null;
+  }
+
+  setEpilogueVisible(visible: boolean): void {
+    this.entries.filter((entry) => entry.definition.epilogueOnly).forEach((entry) => {
+      entry.object.visible = visible;
+    });
   }
 
   getUndiscovered(id: DiscoverableDefinition['id'] | undefined): DiscoverableDefinition | null {
@@ -210,7 +243,7 @@ export class DiscoverableSystem {
 
   private findContext(position: THREE.Vector3, radius: number): DiscoverableEntry | null {
     return this.entries
-      .filter((candidate) => !candidate.found)
+      .filter((candidate) => !candidate.found && candidate.object.visible)
       .sort((first, second) =>
         this.horizontalDistance(position, first.object.position) - this.horizontalDistance(position, second.object.position),
       )

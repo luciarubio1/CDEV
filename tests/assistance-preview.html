@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Primera Línea · prueba de asistencia</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <aside id="preview-controls" style="position:fixed;top:16px;left:16px;z-index:10;background:#173a33;color:white;padding:16px;border-radius:8px;font:14px Arial;display:grid;gap:8px">
+      <strong>Prueba aislada del puesto de asistencia</strong>
+      <span>Usa la escena real; no recorre el combate.</span>
+      <a style="color:#adf4dd" href="?health=reduced">Salud reducida (50)</a>
+      <a style="color:#adf4dd" href="?health=full">Salud completa (100)</a>
+      <span id="preview-status"></span>
+      <button id="preview-start" type="button">Recibir asistencia</button>
+    </aside>
+    <script type="module" src="/src/dev/assistance-preview.ts"></script>
+  </body>
+</html>

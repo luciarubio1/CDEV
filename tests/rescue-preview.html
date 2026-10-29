@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="es">
+<head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Primera Línea · prueba de rescate</title></head>
+<body>
+  <div id="app"></div>
+  <aside style="position:fixed;z-index:2;right:16px;top:80px;background:#173a33;color:white;padding:12px;font:14px Arial;max-width:270px">
+    <strong>Prueba aislada del rescate</strong>
+    <p>Clic en la escena · WASD y mouse · F: recoger/entregar · B: bitácora · Enter: continuar · Esc: cursor.</p>
+    <p id="preview-status"></p><p id="preview-interaction"></p>
+    <a style="color:#a9e8d5" href="/tests/rescue-preview.html">Reiniciar prueba</a>
+  </aside>
+  <section class="guide-dialogue" id="preview-dialog"><div class="guide-dialogue__card"><strong></strong><p></p><button type="button">Continuar</button></div></section>
+  <script type="module" src="/src/dev/rescue-preview.ts"></script>
+</body>
+</html>

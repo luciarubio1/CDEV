@@ -118,8 +118,9 @@ export class MainMenu {
     const creditsButton = this.createActionButton('Créditos', () =>
       this.showPanel('credits'),
     );
+    const restartButton = this.createActionButton('Reiniciar experiencia', () => window.location.reload());
 
-    actions.append(this.startButton, controlsButton, creditsButton);
+    actions.append(this.startButton, controlsButton, creditsButton, restartButton);
     return actions;
   }
 

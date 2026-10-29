@@ -11,7 +11,7 @@ interface CircleCollider {
   radius: number;
 }
 
-interface RectangleCollider {
+export interface RectangleCollider {
   type: 'rectangle';
   center: THREE.Vector3;
   halfWidth: number;
@@ -27,21 +27,30 @@ type Collider = CircleCollider | RectangleCollider;
 export class CollisionSystem {
   private readonly colliders: Collider[] = [];
 
-  addCircle(center: THREE.Vector3, radius: number): void {
-    this.colliders.push({ type: 'circle', center: center.clone(), radius });
+  addCircle(center: THREE.Vector3, radius: number): THREE.Vector3 {
+    const colliderCenter = center.clone();
+    this.colliders.push({ type: 'circle', center: colliderCenter, radius });
+    return colliderCenter;
   }
 
   addRectangle(
     center: THREE.Vector3,
     width: number,
     depth: number,
-  ): void {
-    this.colliders.push({
+  ): RectangleCollider {
+    const collider: RectangleCollider = {
       type: 'rectangle',
       center: center.clone(),
       halfWidth: width / 2,
       halfDepth: depth / 2,
-    });
+    };
+    this.colliders.push(collider);
+    return collider;
+  }
+
+  removeRectangle(collider: RectangleCollider): void {
+    const index = this.colliders.indexOf(collider);
+    if (index >= 0) this.colliders.splice(index, 1);
   }
 
   /**
@@ -85,5 +94,9 @@ export class CollisionSystem {
         Math.abs(position.z - collider.center.z) < collider.halfDepth + playerRadius
       );
     });
+  }
+
+  canOccupy(position: THREE.Vector3, radius = PLAYER_COLLISION_RADIUS): boolean {
+    return !this.isBlocked(position, radius);
   }
 }

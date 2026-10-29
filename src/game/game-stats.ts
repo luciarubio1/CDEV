@@ -1,5 +1,6 @@
 export interface GameStatsSnapshot {
   survivalSeconds: number;
+  explorationSeconds: number;
   firesExtinguished: number;
   maxActiveFires: number;
   wavesStarted: number;
@@ -11,6 +12,8 @@ export interface GameStatsSnapshot {
   discoveriesFound: number;
   predominantWind: string;
   windChanges: number;
+  epilogueStationsFound: number;
+  accompaniedRescueCompleted: boolean;
 }
 
 function nonNegativeFinite(value: number): number {
@@ -19,6 +22,7 @@ function nonNegativeFinite(value: number): number {
 
 export class GameStats {
   private survivalSeconds = 0;
+  private explorationSeconds = 0;
   private firesExtinguished = 0;
   private maxActiveFires = 0;
   private wavesStarted = 0;
@@ -30,10 +34,16 @@ export class GameStats {
   private discoveriesFound = 0;
   private predominantWind = 'Norte';
   private windChanges = 0;
+  private epilogueStationsFound = 0;
+  private accompaniedRescueCompleted = false;
+  recordAccompaniedRescue(): void { this.accompaniedRescueCompleted = true; }
 
   updateSurvivalTime(delta: number): void {
     this.survivalSeconds += nonNegativeFinite(delta);
   }
+
+  updateExplorationTime(delta: number): void { this.explorationSeconds += nonNegativeFinite(delta); }
+  recordEpilogueStations(found: number): void { this.epilogueStationsFound = Math.max(this.epilogueStationsFound, Math.floor(nonNegativeFinite(found))); }
 
   recordFireState(
     activeFires: number,
@@ -84,6 +94,7 @@ export class GameStats {
   snapshot(): GameStatsSnapshot {
     return {
       survivalSeconds: Math.round(this.survivalSeconds),
+      explorationSeconds: Math.round(this.explorationSeconds),
       firesExtinguished: this.firesExtinguished,
       maxActiveFires: this.maxActiveFires,
       wavesStarted: this.wavesStarted,
@@ -95,6 +106,8 @@ export class GameStats {
       discoveriesFound: this.discoveriesFound,
       predominantWind: this.predominantWind,
       windChanges: this.windChanges,
+      epilogueStationsFound: this.epilogueStationsFound,
+      accompaniedRescueCompleted: this.accompaniedRescueCompleted,
     };
   }
 }
