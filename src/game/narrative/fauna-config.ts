@@ -1,12 +1,13 @@
 import * as THREE from 'three';
+import { NPC_MOVEMENT } from './npc-movement';
 
 const point = (x: number, z: number): THREE.Vector3 => new THREE.Vector3(x, 0, z);
 export const FAUNA_CONFIG = {
-  companionSpeed: 0.8,
-  followRadius: 5,
+  companionSpeed: NPC_MOVEMENT.companionSpeed,
+  followRadius: NPC_MOVEMENT.stopDistance,
   interactionRadius: 3,
   refugeSpeed: 1.2,
-  veterinarianSpeed: 1.4,
+  veterinarianSpeed: NPC_MOVEMENT.veterinarianSpeed,
   evaluationSeconds: 2.5,
   routeA: [point(-7, 11.8), point(-6, 13), point(-3.8, 14.3), point(-1.8, 15.3)],
   routeB: [point(-1.8, 15.3), point(0.8, 16.8), point(3, 17.6), point(3.5, 18.3)],

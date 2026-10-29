@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 
 export const CARRIER_SIZE = { width: 1.4, depth: 0.75, height: 0.8 } as const;
+export const CARRIER_CARRY_POSE = { height: 1.18, forward: .85 } as const;
 
 /** Transportín único: se reparentea al jugador, al equipo y al puesto. */
 export function createAnimalCarrier(): THREE.Group {
@@ -31,6 +32,13 @@ export function createAnimalCarrier(): THREE.Group {
   object.add(door);
   const handle = new THREE.Mesh(new THREE.TorusGeometry(0.14, 0.025, 8, 16, Math.PI), dark);
   handle.position.y = 0.85; object.add(handle);
+  for (const side of [-1,1]) {
+    const grip = new THREE.Group(); grip.name = side < 0 ? 'carrier-grip-left' : 'carrier-grip-right';
+    grip.position.set(side*.7,.36,-.28); object.add(grip);
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(.045,.045,.16), dark); grip.add(rail);
+    const playerGrip = new THREE.Group(); playerGrip.name = side < 0 ? 'carrier-player-grip-left' : 'carrier-player-grip-right';
+    playerGrip.position.set(side*.71,.48,.1); object.add(playerGrip);
+  }
   object.visible = false;
   return object;
 }

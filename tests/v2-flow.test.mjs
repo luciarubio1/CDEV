@@ -57,9 +57,308 @@ const { createAnimalCarrier, CARRIER_SIZE } = await import('../src/game/world/an
 const { FOX_NOTE, OTHER_FAUNA_NOTES, FAUNA_SOURCES } = await import('../src/game/narrative/fauna-education.ts');
 const { Bitacora } = await import('../src/ui/bitacora.ts');
 const { getTerrainHeight } = await import('../src/game/world/terrain.ts');
+const { createCharacter, characterRig, animateCharacter, animateCharacters, setCharacterCarrier, setCharacterGesture } = await import('../src/game/npc/character-model.ts');
+const { createFireTruck, FIRE_TRUCK_RELOAD_RADIUS } = await import('../src/game/world/fire-truck.ts');
+const { TRUCK_ANCHORS, truckAnchorWorld, registerTruckCollision } = await import('../src/game/world/truck-model.ts');
+const { CARRIER_CARRY_POSE } = await import('../src/game/world/animal-carrier.ts');
+const { PreparationSequence, PREPARATION_TASKS } = await import('../src/game/narrative/preparation-sequence.ts');
+const { createSierraBackdrop } = await import('../src/game/world/sierra-backdrop.ts');
+const { createTerrain, TERRAIN_SEGMENTS } = await import('../src/game/world/terrain.ts');
+const { createSierraTree, styleSierraBush } = await import('../src/game/world/sierra-vegetation.ts');
+const { LandscapeDecoration, decorativePlacements, isLandscapeReserved } = await import('../src/game/world/landscape-decoration.ts');
+const { TREE_PLACEMENTS, BUSH_PLACEMENTS, ROCK_PLACEMENTS, LANDSCAPE_SETTINGS } = await import('../src/game/world/landscape-config.ts');
+const { VegetationStateSystem } = await import('../src/game/world/vegetation-state.ts');
+const { FireSource } = await import('../src/game/fire/fire-source.ts');
+const { FIRE_VISUAL } = await import('../src/game/fire/fire-visual-config.ts');
+
+test('llamas sin halos: una malla cruzada, paleta cálida y una luz por foco, con buffers reutilizados', () => {
+  for(const kind of ['common','critical']) {
+    const source=new FireSource({position:new THREE.Vector3(),kind}),mesh=source.object.getObjectByName('flame-tongues');
+    const geometry=mesh.geometry,positions=geometry.attributes.position.array,strength=geometry.attributes.strength.array,material=mesh.material;
+    assert.equal(material.blending,THREE.NormalBlending);assert.equal(material.depthWrite,false);assert.equal(material.side,THREE.DoubleSide);
+    assert.equal(source.object.children.filter((child)=>child.isPointLight).length,1);
+    assert.ok(material.uniforms.yellow.value.b<.2);
+    assert.equal(source.object.children.filter((child)=>child.isSprite&&child.name.includes('flame')).length,0);
+    const tongues=kind==='critical'?FIRE_VISUAL.criticalTongues:FIRE_VISUAL.commonTongues;
+    assert.equal(geometry.attributes.position.count,tongues*FIRE_VISUAL.crossedPlanes*(FIRE_VISUAL.heightSegments+1)*3);
+    for(let i=0;i<120;i++)source.update(1/60,{direction:new THREE.Vector3(1,0,0),intensity:.65});
+    assert.equal(mesh.geometry,geometry);assert.equal(mesh.material,material);assert.equal(geometry.attributes.position.array,positions);assert.equal(geometry.attributes.strength.array,strength);
+    const index=geometry.index.array,point=new THREE.Vector3(),camera=new THREE.PerspectiveCamera(60,1,.1,100);
+    for(let angle=0;angle<Math.PI*2;angle+=Math.PI/4){
+      camera.position.set(Math.cos(angle)*5,2.2,Math.sin(angle)*5);camera.lookAt(0,1,0);camera.updateMatrixWorld(true);
+      let area=0;
+      for(let i=0;i<index.length;i+=3){
+        const projected=[];
+        for(let j=0;j<3;j++){point.fromBufferAttribute(geometry.attributes.position,index[i+j]).project(camera);projected.push([point.x,point.y]);}
+        const [a,b,c]=projected;area+=Math.abs((b[0]-a[0])*(c[1]-a[1])-(b[1]-a[1])*(c[0]-a[0]));
+      }
+      assert.ok(area>.05,'las hojas cruzadas conservan superficie proyectada desde varios lados');
+    }
+  }
+});
+
+test('base del fuego sigue el relieve y evita una roca sin mover el foco lógico ni su alcance', () => {
+  const origin=new THREE.Vector3(2,0,1);origin.y=getTerrainHeight(origin.x,origin.z);
+  const fire=new FireSystem(),collision=new CollisionSystem();collision.addCircle(origin,.6);
+  fire.setVisualSurface({terrainHeight:getTerrainHeight,canBurnAt:(x,z,r)=>collision.canOccupyXZ(x,z,r)});
+  const source=fire.addSource({position:origin,kind:'critical'}),mesh=source.object.getObjectByName('flame-tongues'),rig=source.flames;
+  assert.deepEqual(source.object.position.toArray(),origin.toArray());assert.ok(rig.anchors.some((anchor)=>anchor.valid));
+  for(let step=0;step<3;step++){
+    source.update(.1,{direction:new THREE.Vector3(1,0,-1),intensity:.7});
+    for(let tongue=0;tongue<rig.anchors.length;tongue++){
+      if(!rig.anchors[tongue].valid)continue;
+      assert.ok(Math.hypot(rig.anchors[tongue].x,rig.anchors[tongue].z)<=FIRE_VISUAL.maxVisualOffset+1e-6);
+      for(let plane=0;plane<FIRE_VISUAL.crossedPlanes;plane++)for(let col=0;col<3;col++){
+        const n=((tongue*FIRE_VISUAL.crossedPlanes+plane)*(FIRE_VISUAL.heightSegments+1))*3+col;
+        const attr=mesh.geometry.attributes.position,x=origin.x+attr.getX(n),z=origin.z+attr.getZ(n),y=origin.y+attr.getY(n);
+        assert.ok(Math.abs(y-getTerrainHeight(x,z)-FIRE_VISUAL.baseClearance)<1e-6);
+        assert.ok(Math.hypot(x-origin.x,z-origin.z)>.6);
+      }
+    }
+  }
+  assert.ok(fire.getNearestActivePosition(origin,4).distanceTo(origin)<1e-8);
+});
+
+test('agua reduce altura, cantidad y luz; el apagado conserva una cola visual sin daño ni recuento extra', () => {
+  const fire=new FireSystem();fire.setPropagationEnabled(false);
+  const source=fire.addSource({position:new THREE.Vector3(),kind:'critical'}),mesh=source.object.getObjectByName('flame-tongues');
+  const maxHeight=()=>{const positions=mesh.geometry.attributes.position;let y=0;for(let i=0;i<positions.count;i++)y=Math.max(y,positions.getY(i));return y;};
+  source.update(.1);const height=maxHeight(),count=source.flames.visibleTongueCount,light=source.object.getObjectByName('fire-light').intensity;
+  source.applyWaterImpact();source.extinguish(GAME_BALANCE.fire.waterResistance.critical*.6);source.update(.3);
+  assert.ok(maxHeight()<height*.85);assert.ok(source.flames.visibleTongueCount<count);assert.ok(source.object.getObjectByName('fire-light').intensity<light*.5);
+  assert.ok(source.object.children.some((child)=>child.name==='water-mist'&&child.visible));
+  const before=source.flames.displayFraction;fire.extinguishNearest(new THREE.Vector3(),4,100);
+  assert.equal(source.isActive,false);assert.equal(source.object.getObjectByName('fire-light').intensity,0);
+  assert.equal(source.object.visible,true);source.update(.05);assert.ok(source.flames.displayFraction<before);
+  assert.equal(fire.activeCount,0);assert.equal(fire.extinguishedCount,1);
+  source.update(FIRE_VISUAL.finishTailSeconds);assert.equal(source.object.visible,false);
+  assert.equal(fire.extinguishNearest(new THREE.Vector3(),4,100).hit,false);assert.equal(fire.extinguishedCount,1);
+});
+
+test('humo y chispas responden al viento; la misión conserva sus referencias sin cono ni columna', () => {
+  const random=Math.random;let calm,windy;
+  try{Math.random=()=>.5;calm=new FireSource({position:new THREE.Vector3()});windy=new FireSource({position:new THREE.Vector3()});}finally{Math.random=random;}
+  calm.update(.1);windy.update(.1,{direction:new THREE.Vector3(1,0,0),intensity:1});
+  assert.ok(windy.object.getObjectByName('fire-smoke').position.x>calm.object.getObjectByName('fire-smoke').position.x);
+  assert.ok(windy.object.getObjectByName('fire-embers').geometry.attributes.position.getX(0)>calm.object.getObjectByName('fire-embers').geometry.attributes.position.getX(0));
+  assert.equal(windy.object.getObjectByName('fire-embers').material.size,FIRE_VISUAL.emberSize);
+  const fire=new FireSystem(),director=new MissionDirector(fire,context.fireTruckPosition,()=>0);director.startAfterPreparation();
+  assert.equal(director.object.children.length,1,'solo se conserva la radio, sin grupos de marcadores');
+  assert.equal(director.accessFire,fire.sources[0]);
+  assert.ok(director.getNavigationTarget(context.playerPosition,context.housePosition).position.distanceTo(fire.sources[0].object.position)<1e-8);
+  const result=fire.extinguishNearest(fire.sources[0].object.position,1,100);assert.equal(result.extinguished,true);
+  director.update(.1,context,0);assert.equal(director.currentStage,'radio');
+  assert.equal(director.requestReinforcements(director.radioPosition),true);assert.equal(director.currentStage,'house');assert.equal(director.criticalFires[0],fire.sources[1]);
+});
+
+test('los focos reales de misión mantienen todas sus llamas junto a los obstáculos actuales', () => {
+  const collision=new CollisionSystem();collision.addRectangle(context.housePosition,5,4);
+  registerTruckCollision(createFireTruck(),collision);
+  for(const [x,z] of TREE_PLACEMENTS)if(!isReinforcementArea(x,z)&&!isFaunaArea(x,z))collision.addCircle(new THREE.Vector3(x,0,z),LANDSCAPE_SETTINGS.treeTrunkRadius);
+  for(const [x,z] of BUSH_PLACEMENTS)if(!isReinforcementArea(x,z)&&!isFaunaArea(x,z))collision.addCircle(new THREE.Vector3(x,0,z),.62);
+  for(const [x,z,scale] of ROCK_PLACEMENTS)if(!isReinforcementArea(x,z)&&!isFaunaArea(x,z))collision.addCircle(new THREE.Vector3(x,0,z),scale*.8);
+  const fire=new FireSystem();fire.setPropagationEnabled(false);fire.setVisualSurface({terrainHeight:getTerrainHeight,canBurnAt:(x,z,r)=>collision.canOccupyXZ(x,z,r)});
+  const director=new MissionDirector(fire,context.fireTruckPosition,getTerrainHeight);director.startAfterPreparation();
+  const check=()=>{const source=fire.sources.at(-1);assert.equal(source.flames.visibleTongueCount,source.flames.anchors.length);assert.ok(source.flames.anchors.every((anchor)=>anchor.valid));};
+  check();fire.extinguishNearest(director.accessFire.object.position,1,10);director.update(.1,context,0);director.requestReinforcements(director.radioPosition);check();
+  fire.extinguishNearest(director.criticalFires[0].object.position,1,10);director.update(.1,context,0);
+  for(const source of director.criticalFires){assert.equal(source.flames.visibleTongueCount,FIRE_VISUAL.criticalTongues);assert.ok(source.flames.anchors.every((anchor)=>anchor.valid));}
+});
 
 const context = { playerPosition: new THREE.Vector3(), fireTruckPosition: new THREE.Vector3(-16, 0, 16), housePosition: new THREE.Vector3(10, 0, 10) };
 const terrain = (x, z) => Math.sin(x) * 0.1 + Math.cos(z) * 0.2;
+
+test('preparación recuperada: equipo reconocible antes de habilitar F, recogida y conexión únicas', () => {
+  const truck=createFireTruck(), sequence=new PreparationSequence(truck);
+  sequence.setAvailable(false);
+  assert.equal(sequence.object.visible,true);
+  assert.ok(sequence.tasks[0].object.getObjectByName('jacket'));
+  assert.ok(sequence.tasks[0].object.getObjectByName('boot'));
+  assert.equal(sequence.tasks[0].object.getObjectByName('stored-suit').visible,true);
+  assert.equal(truck.getObjectByName('stored-hose').visible,true);
+  assert.equal(truck.getObjectByName('connected-hose').visible,false);
+  assert.equal(sequence.completeCurrentTask(sequence.tasks[0].interactionPosition),null);
+  sequence.setAvailable(true);
+  const player=(index)=>sequence.tasks[index].interactionPosition.clone().add(new THREE.Vector3(0,1.7,0));
+  assert.equal(sequence.completeCurrentTask(player(2)),null);
+  assert.equal(sequence.completeCurrentTask(player(0)).id,'suit');
+  assert.equal(sequence.tasks[0].object.getObjectByName('stored-suit').visible,false);
+  assert.equal(sequence.tasks[0].object.getObjectByName('stand-post').visible,true);
+  assert.equal(sequence.getInteractionMessage(player(1)),'Presioná F para retirar la manguera');
+  assert.equal(sequence.completeCurrentTask(player(1)).id,'hose');
+  assert.equal(truck.getObjectByName('stored-hose').visible,false);
+  assert.equal(sequence.isComplete,false);
+  assert.equal(sequence.completeCurrentTask(player(2)).id,'connection');
+  assert.equal(truck.getObjectByName('connection-cap').visible,false);
+  assert.equal(truck.getObjectByName('connected-hose').visible,true);
+  assert.equal(sequence.isComplete,true);
+  assert.equal(sequence.completeCurrentTask(player(2)),null);
+});
+
+test('los tres puntos se alcanzan rodeando la carrocería, con los colliders de equipo presentes', () => {
+  const truck=createFireTruck(), collision=new CollisionSystem();registerTruckCollision(truck,collision);
+  const preparation=new PreparationSequence(truck,collision), step=.25, limit=20;
+  const world=(ix,iz)=>truck.localToWorld(new THREE.Vector3(ix*step,0,iz*step));
+  const clear=(ix,iz)=>{
+    const x=ix*step,z=iz*step;
+    if(Math.abs(x)<1.65&&z>-3.29&&z<3.05)return false;
+    return collision.canOccupy(world(ix,iz));
+  };
+  const queue=[[-16,-16]], reached=new Set(['-16,-16']);
+  for(let q=0;q<queue.length;q++) {
+    const [x,z]=queue[q];
+    for(const [dx,dz] of [[1,0],[-1,0],[0,1],[0,-1]]){
+      const nx=x+dx,nz=z+dz,key=`${nx},${nz}`;
+      if(Math.abs(nx)>limit||Math.abs(nz)>limit||reached.has(key)||!clear(nx,nz))continue;
+      reached.add(key);queue.push([nx,nz]);
+    }
+  }
+  for(const point of preparation.tasks) assert.ok(queue.some(([x,z])=>{
+    const position=world(x,z);position.y=point.task.position.y+1.7;
+    return preparation.getNearbyTask(position)?.id===point.task.id;
+  }),`no se alcanza ${point.task.id}`);
+});
+
+test('sierras conectadas y deterministas fuera del mapa; continuación del suelo sin hueco en el borde', () => {
+  const a=createSierraBackdrop(),b=createSierraBackdrop();
+  assert.equal(a.children.length,6);
+  a.children.forEach((mesh,index)=>{
+    const positions=mesh.geometry.attributes.position;
+    assert.deepEqual(positions.array,b.children[index].geometry.attributes.position.array);
+    if(mesh.name==='non-walkable-apron') {
+      for(let i=0;i<TERRAIN_SEGMENTS*4;i++) assert.ok(Math.abs(positions.getY(i)-getTerrainHeight(positions.getX(i),positions.getZ(i)))<1e-6);
+      return;
+    }
+    assert.equal(positions.count,(LANDSCAPE_SETTINGS.ridgeSegments+1)*(LANDSCAPE_SETTINGS.ridgeDepthSegments+1));
+    assert.equal(mesh.geometry.index.count,LANDSCAPE_SETTINGS.ridgeSegments*LANDSCAPE_SETTINGS.ridgeDepthSegments*6);
+    for(let i=0;i<positions.count;i++) assert.ok(Math.abs(positions.getX(i))>=30||Math.abs(positions.getZ(i))>=30);
+  });
+  const ground=createTerrain(), vertices=ground.geometry.attributes.position;
+  for(let i=0;i<vertices.count;i++) assert.ok(Math.abs(vertices.getY(i)-getTerrainHeight(vertices.getX(i),vertices.getZ(i)))<1e-6);
+  assert.equal(ground.geometry.attributes.color.count,vertices.count);
+});
+
+test('decoración instanciada repetible, apoyada y despejada; no modifica combustible ni métricas', () => {
+  assert.deepEqual(decorativePlacements(),decorativePlacements());
+  const decoration=new LandscapeDecoration(getTerrainHeight), empty=new LandscapeDecoration(getTerrainHeight,0);
+  assert.ok(decoration.grass.count>0);assert.equal(empty.grass.count,0);
+  assert.equal(decoration.object.children.length,3);
+  for(const mesh of decoration.object.children){assert.equal(mesh.isInstancedMesh,true);assert.equal(mesh.castShadow,false);}
+  for(const p of decoration.grassPositions){assert.equal(isLandscapeReserved(p.x,p.z,0),false);assert.ok(Math.abs(p.y-getTerrainHeight(p.x,p.z)-.006)<1e-8);}
+  const fire=new FireSystem(), vegetation=new VegetationStateSystem();
+  TREE_PLACEMENTS.forEach(([x,z],index)=>{
+    if(isReinforcementArea(x,z)||isFaunaArea(x,z))return;
+    const tree=createSierraTree(5.5+(index%4)*.8,index),position=new THREE.Vector3(x,getTerrainHeight(x,z),z);
+    vegetation.register(tree,position,5);fire.trackCombustible({position,ignitionDistance:5.5,ignitionTime:10+(index%4)*3});
+  });
+  assert.equal(fire.combustibleCount,15);assert.equal(vegetation.count,15);
+  const before=decoration.grass.instanceColor.array.slice();
+  decoration.updateBurning(decoration.grassPositions);
+  assert.notDeepEqual(decoration.grass.instanceColor.array,before);
+  assert.equal(fire.combustibleCount,15);assert.equal(vegetation.count,15);assert.equal(vegetation.affectedCount,0);
+});
+
+test('copas nuevas mantienen quemado persistente y aislado; arbusto local conserva textura y collider', () => {
+  const first=createSierraTree(6,0),second=createSierraTree(6,0);
+  const state=new VegetationStateSystem();state.register(first,new THREE.Vector3(),5);state.register(second,new THREE.Vector3(15,0,0),5);
+  const leaf=first.children.find((node)=>node.isMesh&&node.geometry.type==='IcosahedronGeometry');
+  const other=second.children.find((node)=>node.isMesh&&node.geometry.type==='IcosahedronGeometry');
+  const original=other.material.color.clone();state.update(3,[new THREE.Vector3()]);state.update(1,[]);
+  assert.equal(state.burnedCount,1);assert.equal(state.affectedSurfaceArea,5);
+  assert.notDeepEqual(leaf.material.color.toArray(),original.toArray());assert.deepEqual(other.material.color.toArray(),original.toArray());
+  const bush=new THREE.Mesh(new THREE.BoxGeometry(3,1,3),new THREE.MeshStandardMaterial({map:new THREE.Texture()}));
+  const texture=bush.material.map;styleSierraBush(bush,2,.62);
+  const size=new THREE.Box3().setFromObject(bush).getSize(new THREE.Vector3());
+  assert.ok(Math.abs(size.x/2-.62)<1e-6);assert.equal(bush.material.map,texture);
+});
+
+test('personajes articulados: variantes identificables, geometría compartida y raíz lógica estable', () => {
+  for (const role of ['brigadista', 'salud', 'fauna']) {
+    const actor = createCharacter(role);
+    const rig = characterRig(actor);
+    assert.equal(rig.visual.parent, actor);
+    for (const limb of [...rig.arms,...rig.legs]) {
+      assert.equal(limb.joint.parent, limb.pivot);
+      assert.equal(limb.end.parent, limb.joint);
+    }
+    if (role !== 'brigadista') {
+      assert.ok(actor.getObjectByName(`label-${role.toUpperCase()}`));
+      assert.ok(actor.getObjectByName('work-kit'));
+    }
+    const position = actor.position.clone(), rotation = actor.quaternion.clone();
+    setCharacterGesture(actor,.8);
+    animateCharacter(actor,.1,new THREE.Vector3(3,1.7,2),true);
+    assert.deepEqual(actor.position.toArray(),position.toArray());
+    assert.deepEqual(actor.quaternion.toArray(),rotation.toArray());
+    assert.ok(rig.arms[0].joint.rotation.x < -.1);
+  }
+  const a = createCharacter(), b = createCharacter();
+  assert.equal(a.getObjectByName('boot').geometry,b.getObjectByName('boot').geometry);
+  assert.equal(a.getObjectByName('boot').material,b.getObjectByName('boot').material);
+});
+
+test('caminata responde a distancia real, termina en reposo y no desplaza raíz ni cámara', () => {
+  const actor = createCharacter(), rig = characterRig(actor), camera = new THREE.PerspectiveCamera();
+  const cameraPosition = camera.position.clone();
+  animateCharacter(actor,1/60);
+  for (let i=0;i<40;i++) { actor.position.z += 2.5/60; animateCharacter(actor,1/60); }
+  assert.ok(rig.blend > .9);
+  assert.ok(rig.legs[0].pivot.rotation.x * rig.legs[1].pivot.rotation.x < 0);
+  assert.ok(Math.abs(rig.arms[0].pivot.rotation.x) > .01);
+  const phase = rig.phase;
+  for (let i=0;i<180;i++) animateCharacter(actor,1/60);
+  assert.equal(rig.phase,phase); assert.ok(rig.blend < 1e-8);
+  assert.ok(Math.abs(rig.legs[0].pivot.rotation.x) < 1e-8);
+  assert.deepEqual(camera.position.toArray(),cameraPosition.toArray());
+  assert.ok(Math.abs(actor.position.z - 40*2.5/60) < 1e-9);
+});
+
+test('ambas manos del veterinario alcanzan los agarres al llevar la caja, también con giro y paso', () => {
+  const actor = createCharacter('fauna'), rig = characterRig(actor), carrier = createAnimalCarrier();
+  carrier.position.set(0,CARRIER_CARRY_POSE.height,CARRIER_CARRY_POSE.forward); actor.add(carrier);
+  setCharacterCarrier(actor,carrier);
+  const world = new THREE.Scene(); world.add(actor);
+  for (let i=0;i<120;i++) {
+    actor.position.z += .03; actor.rotation.y += .01;
+    animateCharacter(actor,1/60); world.updateMatrixWorld(true);
+    rig.arms.forEach((arm,index) => {
+      const hand = arm.end.getWorldPosition(new THREE.Vector3());
+      const grip = carrier.getObjectByName(index === 0 ? 'carrier-grip-left' : 'carrier-grip-right').getWorldPosition(new THREE.Vector3());
+      assert.ok(hand.distanceTo(grip) < 1e-6, `mano ${index}: ${hand.distanceTo(grip)}`);
+    });
+  }
+  setCharacterCarrier(actor,null);
+  animateCharacter(actor,.1); assert.equal(rig.carrier,null);
+});
+
+test('camión compartido mantiene envolvente y anclajes; preparación y radio siguen accesibles', () => {
+  const truck = createFireTruck(), other = createFireTruck();
+  truck.position.set(0,0,0); truck.rotation.set(0,0,0); truck.updateMatrixWorld(true);
+  const bounds = new THREE.Box3().setFromObject(truck);
+  assert.ok(bounds.min.x >= -1.22 && bounds.max.x <= 1.4,`envolvente con acople: ${bounds.min.x}/${bounds.max.x}`);
+  assert.ok(bounds.min.z >= -2.841 && bounds.max.z <= 2.601);
+  assert.ok(truck.getObjectByName('windshield'));
+  assert.ok(truck.getObjectByName('equipment-compartment'));
+  assert.ok(truck.getObjectByName('label-BOMBEROS'));
+  assert.equal(truck.getObjectByName('tire').geometry,other.getObjectByName('tire').geometry);
+  for (const name of Object.keys(TRUCK_ANCHORS)) assert.ok(truck.getObjectByName(`truck-${name}`));
+  const initial = createFireTruck();
+  const preparation = new PreparationSequence(initial);
+  const positions = PREPARATION_TASKS.map((task)=>task.position.toArray());
+  const visuals = preparation.tasks.map((point)=>point.object.position.clone());
+  preparation.update(1);
+  preparation.tasks.forEach((point,index)=>assert.ok(point.object.position.distanceTo(visuals[index]) < 1e-9));
+  assert.deepEqual(PREPARATION_TASKS.map((task)=>task.position.toArray()),positions);
+  for (const point of preparation.tasks) {
+    const player = point.task.position.clone(); player.y += 1.7;
+    assert.equal(preparation.getNearbyTask(player)?.id,point.task.id);
+  }
+  assert.equal(FIRE_TRUCK_RELOAD_RADIUS,3.5);
+  const target = truckAnchorWorld(initial,'hose-rack',new THREE.Vector3());
+  assert.ok(preparation.tasks[1].object.position.distanceTo(target) < 1e-9);
+  const director = new MissionDirector(new FireSystem(),context.fireTruckPosition,()=>0);
+  assert.deepEqual(director.radioPosition.toArray(),[-12.6,0,15]);
+});
 
 test('recorrido único: acceso → radio → vivienda → bosque; no hay incidentes futuros ni espera final', () => {
   const fire = new FireSystem();
@@ -229,7 +528,10 @@ test('extinción medida por simulación: común 2.5 s / 10 agua; crítico 4.5 s 
       assert.equal(fire.extinguishedCount, 1);
       assert.equal(source.extinguishProgress, 1);
       assert.equal(source.intensityValue, 0);
-      assert.equal(source.object.visible, false);
+      assert.equal(source.isActive,false);
+      assert.equal(source.object.getObjectByName('fire-light').intensity,0);
+      source.update(FIRE_VISUAL.finishTailSeconds+.1);
+      assert.equal(source.object.visible,false);
       assert.equal(fire.extinguishNearest(new THREE.Vector3(), 4, 10).hit, false);
       assert.equal(fire.extinguishedCount, 1);
       assert.equal(fire.consumeExtinguishedSources().length, 1);
@@ -246,7 +548,7 @@ test('resistencia independiente de intensidad y sin consumo disponible fuera de 
   source.extinguish(GAME_BALANCE.fire.waterResistance.critical / 2);
   assert.equal(source.extinguishProgress, 0.5);
   assert.ok(Math.abs(source.intensityValue - 0.525) < 1e-8);
-  assert.ok(Math.abs(source.object.children.find((child) => child.isPointLight).intensity - 3.15) < 1e-8);
+  assert.ok(Math.abs(source.object.children.find((child) => child.isPointLight).intensity - FIRE_VISUAL.lightIntensity*.525) < 1e-8);
   const tank = new WaterTank();
   tank.consume(24.99);
   const remainder = tank.consume(1);
@@ -288,11 +590,337 @@ class DialogElement {
   classList = { add: (name) => this.classes.add(name), remove: (name) => this.classes.delete(name), contains: (name) => this.classes.has(name) };
   querySelector(name) { if (!this.children.has(name)) this.children.set(name, new DialogElement()); return this.children.get(name); }
   appendChild() {}
+  after(...nodes) { this.nodes.push(...nodes); }
   append(...nodes) { this.nodes.push(...nodes); }
   replaceChildren(...nodes) { this.nodes = [...nodes]; }
-  addEventListener() {}
+  listeners = new Map();
+  addEventListener(name, callback) { this.listeners.set(name, callback); }
   focus() {}
+  setAttribute(name, value) { this[name] = value; }
 }
+
+const { NPC_MOVEMENT, FollowDistanceGate } = await import('../src/game/narrative/npc-movement.ts');
+const { RESCUE_CAMERA } = await import('../src/game/narrative/rescue-camera.ts');
+const { MainMenu } = await import('../src/ui/menus/main-menu.ts');
+const { configureAwarenessEnding } = await import('../src/ui/ending-panel.ts');
+
+test('cierre de concientización presenta tres ideas y acciones sin consumir métricas', () => {
+  const previous = globalThis.document;
+  globalThis.document = { createElement: (tag) => new DialogElement(tag) };
+  try {
+    const root = new DialogElement();
+    configureAwarenessEnding(root); configureAwarenessEnding(root);
+    assert.equal(root.querySelector('h1').textContent, 'Las llamas se apagaron. El cuidado continúa.');
+    const list = root.querySelector('.awareness-ideas');
+    assert.equal(list.hidden, false); assert.equal(list.nodes.length, 3);
+    assert.deepEqual(list.nodes.map((node) => node.nodes[0].textContent), ['Prevenir', 'Comprender', 'Cuidar']);
+    assert.equal(root.querySelector('.defeat-actions__retry').textContent, 'Volver a recorrer');
+    assert.equal(root.querySelector('.ending-credits').hidden, false);
+    assert.equal(root.querySelector('.defeat-actions__menu').hidden, true);
+    assert.equal(root.querySelector('.impact-message').hidden, true);
+    assert.ok(!/[0-9%]/.test(root.querySelector('.defeat-reflection').textContent));
+  } finally { globalThis.document = previous; }
+});
+
+test('acompañamiento con histéresis: no alterna en el umbral y retoma al acercarse', () => {
+  const gate = new FollowDistanceGate();
+  assert.equal(gate.update(2), true);
+  assert.equal(gate.update(NPC_MOVEMENT.stopDistance + .1), false);
+  for (const distance of [5.4, 5.6, 4.5, 4, 3.6]) assert.equal(gate.update(distance), false);
+  assert.equal(gate.update(NPC_MOVEMENT.resumeDistance), true);
+  assert.equal(gate.update(4.5), true);
+  assert.ok(NPC_MOVEMENT.companionSpeed < GAME_BALANCE.movement.speed);
+  assert.equal(RESCUE_CONFIG.loadingSeconds, 9);
+  assert.equal(RESCUE_CONFIG.placementSeconds, 4);
+  assert.equal(FAUNA_CONFIG.evaluationSeconds, 2.5);
+});
+
+test('traslado acelera y frena sin cortar esquinas, y la pausa detiene la posición', () => {
+  const route = [new THREE.Vector3(), new THREE.Vector3(4,0,0), new THREE.Vector3(4,0,4)];
+  const walker = new WaypointWalker(route, NPC_MOVEMENT.companionSpeed, getTerrainHeight);
+  walker.update(.05);
+  assert.ok(walker.position.x > 0 && walker.position.x < NPC_MOVEMENT.companionSpeed * .05);
+  const paused = walker.position.clone();
+  walker.update(10, false);
+  assert.deepEqual(walker.position.toArray(), paused.toArray());
+  let previous = walker.position.clone(), maximumStep = 0, lastStep = 0;
+  for (let i = 0; i < 1000 && !walker.finished; i++) {
+    walker.update(.05);
+    lastStep = Math.hypot(walker.position.x - previous.x, walker.position.z - previous.z);
+    maximumStep = Math.max(maximumStep, lastStep);
+    assert.ok(walker.position.x <= 4);
+    if (walker.position.z > 0) assert.equal(walker.position.x, 4);
+    assert.equal(walker.position.y, getTerrainHeight(walker.position.x, walker.position.z));
+    previous.copy(walker.position);
+  }
+  assert.equal(walker.finished, true);
+  assert.ok(lastStep < maximumStep * .5);
+});
+
+test('cámara de rescate externa al inicio/medio/final; completo y omitido restauran el mismo estado', () => {
+  function run(skipAt, terrainHeight = terrain) {
+    const f = rescueFixture(terrainHeight);
+    const visibleRig = new THREE.Group(), hiddenRig = new THREE.Group();
+    hiddenRig.visible = false; f.camera.add(visibleRig, hiddenRig);
+    const parent = f.camera.parent;
+    const originalTruck = createFireTruck();
+    originalTruck.position.y = terrainHeight(originalTruck.position.x,originalTruck.position.z);
+    const truckBounds = [new THREE.Box3().setFromObject(originalTruck),new THREE.Box3().setFromObject(f.companion.truck)];
+    f.tour.rescue.interact(f.tour.carrier.position.clone());
+    f.tour.rescue.interact(f.tour.veterinarian.object.position);
+    f.tour.rescue.continueDialogue();
+    assert.equal(visibleRig.visible, false);
+    let frames = 0;
+    const sampled = new Set();
+    while (f.flow.currentStage !== 'rescue-arrival' && frames < 5000) {
+      if (skipAt === f.flow.currentStage) { f.tour.rescue.skip(); break; }
+      if (f.flow.currentStage === 'rescue-ready') f.tour.rescue.continueDialogue();
+      f.tour.rescue.update(1/60, f.camera.position, false);
+      animateCharacters(f.world,1/60,f.camera.position,false);
+      f.world.updateMatrixWorld(true);
+      if (f.tour.rescue.cameraLocked) {
+        sampled.add(f.flow.currentStage);
+        const box = new THREE.Box3().setFromObject(f.tour.carrier).expandByScalar(.15);
+        assert.equal(box.containsPoint(f.camera.position), false, 'la cámara queda fuera de la caja');
+        assert.ok(f.camera.position.distanceTo(f.tour.veterinarian.object.position) > 2);
+        assert.ok(f.collisions.canOccupy(f.camera.position, RESCUE_CAMERA.clearance));
+        assert.ok(f.camera.position.y >= terrainHeight(f.camera.position.x, f.camera.position.z) + RESCUE_CAMERA.groundClearance - .01);
+        assert.equal(f.camera.parent, parent);
+        for (const truckBox of truckBounds) assert.equal(truckBox.containsPoint(f.camera.position),false,'la cámara queda fuera de ambos camiones');
+        assert.equal(new THREE.Box3().setFromObject(f.tour.veterinarian.object).containsPoint(f.camera.position),false);
+        if (f.flow.currentStage === 'rescue-walk') {
+          const rig = characterRig(f.tour.veterinarian.object);
+          rig.arms.forEach((arm,index)=>{
+            const grip=f.tour.carrier.getObjectByName(index===0?'carrier-grip-left':'carrier-grip-right').getWorldPosition(new THREE.Vector3());
+            assert.ok(arm.end.getWorldPosition(new THREE.Vector3()).distanceTo(grip)<1e-6);
+          });
+        }
+      }
+      frames++;
+    }
+    assert.equal(f.flow.currentStage, 'rescue-arrival');
+    assert.equal(f.tour.rescue.cameraLocked, false);
+    assert.equal(visibleRig.visible, true);
+    assert.equal(hiddenRig.visible, false);
+    assert.ok(f.collisions.canOccupy(f.camera.position));
+    assert.equal(f.tour.carrier.parent, f.tour.rescue.view.station.socket);
+    assert.equal(f.tour.animals.fox.parent, f.tour.carrier);
+    f.tour.rescue.continueDialogue(); f.tour.rescue.continueDialogue(); f.tour.rescue.skip();
+    assert.equal(f.completed, 1);
+    return { position: f.camera.position.toArray(), quaternion: f.camera.quaternion.toArray(), stage: f.flow.currentStage, sampled };
+  }
+  for (const terrainHeight of [terrain, getTerrainHeight]) {
+    const full = run(null, terrainHeight);
+    for (const stage of ['rescue-loading', 'rescue-walk', 'rescue-placing']) {
+      assert.ok(full.sampled.has(stage));
+      const skipped = run(stage, terrainHeight);
+      assert.deepEqual(skipped.position, full.position);
+      assert.deepEqual(skipped.quaternion, full.quaternion);
+      assert.equal(skipped.stage, full.stage);
+    }
+  }
+});
+
+test('créditos del cierre reutilizan el menú y vuelven al panel sin iniciar otra partida', () => {
+  const previous = globalThis.document;
+  globalThis.document = { createElement: (tag) => new DialogElement(tag) };
+  try {
+    let starts = 0, resumes = 0, returns = 0;
+    const menu = new MainMenu(new DialogElement(), { onStart: () => starts++, onResume: () => resumes++ });
+    menu.hide(); menu.showCredits(() => returns++);
+    assert.equal(menu.creditsPanel.hidden, false);
+    assert.equal(menu.mainPanel.hidden, true);
+    assert.equal(menu.root.classList.contains('hidden'), false);
+    menu.creditsPanel.nodes[0].nodes.at(-1).listeners.get('click')();
+    assert.equal(returns, 1);
+    assert.equal(starts, 0); assert.equal(resumes, 0);
+    assert.equal(menu.root.classList.contains('hidden'), true);
+  } finally { globalThis.document = previous; }
+});
+
+const { InvestigationTour } = await import('../src/game/narrative/investigation-tour.ts');
+const { InvestigationProgress, INVESTIGATION_STATIONS, INVESTIGATION_RETURN_ROUTE, INVESTIGATION_SETTINGS } = await import('../src/game/narrative/investigation-data.ts');
+const { DiscoverableSystem } = await import('../src/game/narrative/discoverables.ts');
+
+test('investigación: las ocho combinaciones avanzan sin penalizar y conservan tres respuestas únicas', () => {
+  for (let mask = 0; mask < 8; mask++) {
+    const progress = new InvestigationProgress();
+    assert.equal(progress.answer(1, 0), false);
+    assert.equal(progress.answer(0, 2), false);
+    for (let i = 0; i < 3; i++) {
+      const option = (mask >> i) & 1;
+      assert.equal(progress.answer(i, option), true);
+      assert.equal(progress.answer(i, option), false);
+      assert.equal(progress.answers[i].answer, INVESTIGATION_STATIONS[i].options[option]);
+    }
+    assert.equal(progress.count, 3);
+  }
+});
+
+function investigationFixture() {
+  const companion = new ReinforcementView(getTerrainHeight);
+  companion.moveCompanion(INVESTIGATION_STATIONS[0].route[0]);
+  const camera = new THREE.PerspectiveCamera(60, 16/9, .1, 100);
+  camera.position.copy(companion.companionPosition).add(new THREE.Vector3(1,1.7,0));
+  const notes = new Map();
+  let question, completed = 0;
+  const dialogues = [];
+  const tour = new InvestigationTour(companion, camera, getTerrainHeight, {
+    showQuestion: (...args) => { question = args; },
+    unlockEntry: (note) => notes.set(note.id, note),
+  }, (text) => dialogues.push(text), () => {}, () => {}, () => completed++);
+  return { tour, companion, camera, notes, dialogues, get question() { return question; }, get completed() { return completed; } };
+}
+
+function completeInvestigation(fixture, mask = 0) {
+  const { tour, companion, camera } = fixture;
+  assert.equal(tour.interact(camera.position), true);
+  assert.match(fixture.dialogues[0], /Encontraron algunos indicios/);
+  tour.continueDialogue();
+  for (let i = 0; i < 3; i++) {
+    assert.equal(tour.navigationTarget.label, INVESTIGATION_STATIONS[i].title);
+    for (let step = 0; step < 200; step++) tour.update(.1, companion.companionPosition, false, false);
+    camera.position.copy(INVESTIGATION_STATIONS[i].position).add(new THREE.Vector3(.8, 1.7, .8));
+    assert.equal(tour.interact(camera.position), true);
+    const original = camera.quaternion.clone();
+    tour.update(INVESTIGATION_SETTINGS.inspectionSeconds / 2, camera.position, true, false);
+    assert.ok(camera.quaternion.angleTo(original) > .01);
+    tour.update(INVESTIGATION_SETTINGS.inspectionSeconds, camera.position, true, false);
+    assert.equal(tour.stage, 'question');
+    const [, , options, answer, done] = fixture.question;
+    assert.equal(options.length, 2);
+    const feedback = answer((mask >> i) & 1);
+    assert.ok(feedback.length > 20);
+    done();
+  }
+  assert.equal(tour.stage, 'conclusion');
+  assert.match(fixture.dialogues.at(-1), /Contener el fuego fue una parte/);
+  assert.equal(fixture.notes.size, 3);
+  for (const note of fixture.notes.values()) assert.equal(note.sources.length, 2);
+  tour.continueDialogue();
+  assert.match(tour.objective, /Regresá al puesto/);
+  for (let step = 0; step < 200; step++) tour.update(.1, companion.companionPosition, false, false);
+  camera.position.copy(companion.companionPosition).add(new THREE.Vector3(1, 1.7, 0));
+  assert.equal(tour.interact(camera.position), true);
+  assert.equal(tour.stage, 'closing');
+  assert.equal(fixture.completed, 0);
+}
+
+test('recorrido real, notas, brújula y cierre completo/omitido dejan el mismo estado y cámara', () => {
+  const full = investigationFixture(), skipped = investigationFixture();
+  completeInvestigation(full);
+  completeInvestigation(skipped, 7);
+  full.tour.update(INVESTIGATION_SETTINGS.closingSeconds / 2, full.camera.position, true, false);
+  assert.equal(full.completed, 0);
+  full.tour.update(INVESTIGATION_SETTINGS.closingSeconds, full.camera.position, true, false);
+  skipped.tour.finish();
+  assert.equal(full.tour.stage, 'complete');
+  assert.equal(skipped.tour.stage, 'complete');
+  assert.equal(full.completed, 1);
+  assert.equal(skipped.completed, 1);
+  full.tour.finish(); skipped.tour.finish();
+  assert.equal(full.completed, 1);
+  assert.ok(full.camera.position.distanceTo(skipped.camera.position) < 1e-8);
+  assert.ok(full.camera.quaternion.angleTo(skipped.camera.quaternion) < 1e-7);
+  assert.equal(new InvestigationProgress().count, 0);
+  assert.equal(investigationFixture().tour.view.object.visible, false);
+});
+
+test('las ocho combinaciones completan también el controlador y el cierre nunca se repite', () => {
+  for (let mask = 0; mask < 8; mask++) {
+    const fixture = investigationFixture();
+    completeInvestigation(fixture, mask);
+    fixture.tour.finish(); fixture.tour.finish();
+    assert.equal(fixture.completed, 1);
+    assert.equal(fixture.tour.progress.count, 3);
+  }
+});
+
+test('sesión: victoria solo después del rescate y de iniciar el cierre; reinicio sin estado heredado', () => {
+  const session = new GameSession();
+  session.beginContainment(); session.beginCompanionDialogue(); session.beginEpilogue();
+  const flow = session.postFire;
+  flow.meetCompanion(); flow.requestAssistance(); flow.startCare(); flow.finishCare(); flow.closeCare(); flow.meetForFauna();
+  for (const stage of ['fauna-walk-a','fauna-refuge','fauna-dialogue-a','fauna-walk-b','fauna-dialogue-b','fauna-radio','vet-arriving','vet-evaluating','vet-dialogue','carrier','carrier-carrying','rescue-identification','rescue-loading','rescue-ready','rescue-walk','rescue-placing','rescue-arrival','rescue-complete','investigation-meeting']) assert.equal(flow.advanceFauna(stage), true);
+  session.win(); assert.equal(session.isOver, false);
+  session.beginClosing(); assert.equal(session.isClosing, true);
+  assert.equal(session.isOver, false);
+  session.win(); session.win();
+  assert.equal(session.isVictory, true);
+  assert.equal(session.currentPhase, 'results');
+  const restarted = new GameSession();
+  assert.equal(restarted.currentPhase, 'mission');
+  assert.equal(restarted.postFire.rescueCompleted, false);
+  assert.equal(restarted.isOver, false);
+});
+
+test('compañero espera y paneles/foco de ventana pausan recorrido e inspección', () => {
+  const { tour, companion, camera } = investigationFixture();
+  tour.interact(camera.position); tour.continueDialogue();
+  const position = companion.companionPosition.clone();
+  tour.update(5, new THREE.Vector3(30,0,30), false, false);
+  assert.equal(tour.isWaiting, true);
+  assert.deepEqual(companion.companionPosition.toArray(), position.toArray());
+  tour.update(5, camera.position, true, false);
+  assert.deepEqual(companion.companionPosition.toArray(), position.toArray());
+  tour.update(20, camera.position, false, false);
+  camera.position.copy(INVESTIGATION_STATIONS[0].position).add(new THREE.Vector3(1,1.7,0));
+  tour.interact(camera.position);
+  const rotation = camera.quaternion.clone();
+  tour.update(20, camera.position, true, true);
+  assert.equal(tour.stage, 'observing');
+  assert.ok(camera.quaternion.angleTo(rotation) < 1e-7);
+});
+
+test('estaciones y recorridos son transitables con terreno, camiones, puestos y veterinario', () => {
+  const collision = new CollisionSystem();
+  collision.addCircle(context.fireTruckPosition, 2);
+  collision.addCircle(REINFORCEMENT_LAYOUT.truckStop, 2.9);
+  new AssistanceView(getTerrainHeight).show(collision);
+  collision.addRectangle(RESCUE_CONFIG.station, 1.9, 1.2);
+  collision.addCircle(new THREE.Vector3(-9.3,0,10), .4);
+  for (const route of [...INVESTIGATION_STATIONS.map((station) => station.route), INVESTIGATION_RETURN_ROUTE]) {
+    const walker = new WaypointWalker(route, 1, getTerrainHeight);
+    while (!walker.finished) {
+      assert.equal(collision.canOccupy(walker.position, .45), true, `bloqueado en ${walker.position.toArray()}`);
+      walker.update(.05);
+      assert.equal(walker.position.y, getTerrainHeight(walker.position.x, walker.position.z));
+    }
+  }
+  for (const station of INVESTIGATION_STATIONS) assert.equal(collision.canOccupy(station.position, .45), true);
+});
+
+test('las estaciones no cambian los cinco hallazgos opcionales; no hay resultados al entrar a la recorrida', () => {
+  const discoveries = new DiscoverableSystem(() => 0);
+  assert.equal(discoveries.totalCount, 5);
+  discoveries.discover('drought');
+  assert.equal(discoveries.foundCount, 0);
+  const session = new GameSession();
+  session.win(); assert.equal(session.isOver, false);
+  session.beginContainment(); session.beginCompanionDialogue(); session.beginEpilogue();
+  session.win(); assert.equal(session.isOver, false);
+  session.beginClosing(); assert.equal(session.isClosing, false);
+});
+
+test('tarjeta real exige una respuesta y una confirmación; desbloquea notas una sola vez', () => {
+  const previous = globalThis.document;
+  globalThis.document = { createElement: (tag) => new DialogElement(tag) };
+  try {
+    let closes = 0, finishes = 0;
+    const log = new Bitacora(new DialogElement(), () => closes++);
+    const station = INVESTIGATION_STATIONS[0];
+    log.showQuestion(station, station.question, station.options, () => 'Devolución', () => finishes++);
+    log.close(); assert.equal(closes, 0);
+    assert.equal(log.requiresAnswer, true);
+    log.choices.nodes[1].listeners.get('click')();
+    assert.equal(log.requiresAnswer, false);
+    assert.equal(finishes, 0);
+    log.close(); log.close();
+    assert.equal(finishes, 1); assert.equal(closes, 1);
+    log.unlockEntry(station); log.unlockEntry(station);
+    assert.equal(log.unlockedEntries.length, 1);
+  } finally { globalThis.document = previous; }
+});
 
 for (const injured of [true, false]) {
   test(`escena real de asistencia con salud ${injured ? 'reducida' : 'completa'}: cámara, recuperación, salida y recompensa única`, () => {
@@ -505,7 +1133,8 @@ test('rutas del compañero y veterinario libres de construcciones y vegetación 
   assert.equal(collision.canOccupy(FAUNA_CONFIG.carrier.clone().add(new THREE.Vector3(1.3,0,0))), true);
 });
 
-function rescueFixture() {
+function rescueFixture(terrainHeight = terrain) {
+  const terrain = terrainHeight;
   const session = new GameSession();
   session.beginContainment(); session.beginCompanionDialogue(); session.beginEpilogue();
   const flow = session.postFire;
@@ -565,7 +1194,7 @@ test('recogida única: el objeto original pasa a las manos, sin collider fantasm
   });
 });
 
-test('rescate completo: entrega única, zorro dentro, veterinario espera/retoma y animal visible al cierre', (t) => {
+test('rescate completo: entrega única, zorro dentro, traslado externo y animal visible al cierre', (t) => {
   const f = rescueFixture();
   const { tour, flow, camera } = f;
   tour.rescue.interact(tour.carrier.position.clone());
@@ -603,8 +1232,8 @@ test('rescate completo: entrega única, zorro dentro, veterinario espera/retoma 
   tour.rescue.continueDialogue();
   assert.equal(flow.currentStage, 'rescue-walk');
   const vetStart = tour.veterinarian.object.position.clone();
-  tour.rescue.update(5, new THREE.Vector3(60,0,60), false);
-  assert.equal(tour.rescue.isWaiting, true);
+  tour.rescue.update(5, new THREE.Vector3(60,0,60), true);
+  assert.equal(tour.rescue.cameraLocked, true);
   assert.equal(tour.veterinarian.object.position.distanceTo(vetStart), 0);
   let walkSeconds = 0;
   for(let i=0;i<1000 && flow.currentStage==='rescue-walk';i++) {
@@ -616,8 +1245,8 @@ test('rescate completo: entrega única, zorro dentro, veterinario espera/retoma 
     for (const x of [-CARRIER_SIZE.width/2, CARRIER_SIZE.width/2]) for (const z of [-CARRIER_SIZE.depth/2,CARRIER_SIZE.depth/2]) {
       const corner = tour.carrier.localToWorld(new THREE.Vector3(x,0,z));
       const station = tour.rescue.view.station;
-      const aboveStation = Math.abs(corner.x-station.object.position.x) < 0.95 && Math.abs(corner.z-station.object.position.z) < 0.6 && corner.y >= station.object.position.y + RESCUE_CONFIG.stationTop;
-      if (!aboveStation) assert.ok(f.collisions.canOccupy(corner,0.07), 'la caja transportada evita obstáculos durante los giros suaves');
+      const aboveStation = Math.abs(corner.x-station.object.position.x) < 0.95 + .07 && Math.abs(corner.z-station.object.position.z) < 0.6 + .07 && corner.y >= station.object.position.y + RESCUE_CONFIG.stationTop;
+      if (!aboveStation) assert.ok(f.collisions.canOccupy(corner,0.07), `la caja transportada evita obstáculos durante los giros suaves: ${corner.toArray()} vet ${tour.veterinarian.object.position.toArray()} yaw ${tour.veterinarian.object.rotation.y}`);
     }
     assert.ok(tour.animals.fox.parent === tour.carrier);
     if (flow.currentStage === 'rescue-walk') assert.ok(tour.carrier.parent === tour.veterinarian.object);

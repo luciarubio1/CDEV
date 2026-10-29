@@ -10,28 +10,28 @@ const PROJECT_CREDITS = {
 
 const TEAM_MEMBERS = [
   {
-    name: 'Federico Wedemeyer',
-    role: 'Game Designer / Level Designer',
-  },
-  {
     name: 'Paula Chudnosky',
     role: 'Lead Programmer / Gameplay Programmer',
-  },
-  {
-    name: 'Ignacio Salto',
-    role: 'World Builder / Narrative Director',
   },
   {
     name: 'Lucia Rubio',
     role: 'Audio Director / AI Programmer',
   },
   {
-    name: 'Belén Tapia',
-    role: 'Art Director / Sound Designer',
+    name: 'Ignacio Salto',
+    role: 'World Builder / Narrative Director',
   },
   {
     name: 'Juan Cruz Rodríguez Villafañe',
     role: 'Creative Director / Technical Director',
+  },
+  {
+    name: 'Belén Tapia',
+    role: 'Art Director / Sound Designer',
+  },
+  {
+    name: 'Federico Wedemeyer',
+    role: 'Game Designer / Level Designer',
   },
   {
     name: 'Facundo de la Fuente',
@@ -48,6 +48,7 @@ export class MainMenu {
   private readonly creditsPanel = document.createElement('div');
   private readonly startButton = document.createElement('button');
   private isPauseMenu = false;
+  private creditsReturn: (() => void) | null = null;
   private readonly options: MainMenuOptions;
 
   constructor(container: HTMLElement, options: MainMenuOptions) {
@@ -81,6 +82,11 @@ export class MainMenu {
     this.startButton.textContent = 'Continuar experiencia';
     this.root.classList.remove('hidden');
     this.showPanel('main');
+  }
+  showCredits(onReturn: () => void): void {
+    this.creditsReturn = onReturn;
+    this.root.classList.remove('hidden');
+    this.showPanel('credits');
   }
 
   private createHeading(): HTMLElement {
@@ -178,9 +184,14 @@ export class MainMenu {
   }
 
   private createBackButton(): HTMLButtonElement {
-    const button = this.createActionButton('Volver', () =>
-      this.showPanel('main'),
-    );
+    const button = this.createActionButton('Volver', () => {
+      if (this.creditsReturn) {
+        const back = this.creditsReturn;
+        this.creditsReturn = null;
+        this.hide();
+        back();
+      } else this.showPanel('main');
+    });
     button.classList.add('main-menu__back');
     return button;
   }

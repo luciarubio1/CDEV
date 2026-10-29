@@ -24,13 +24,17 @@ function collectMaterials(object: THREE.Object3D): {
 } {
   const materials: THREE.MeshStandardMaterial[] = [];
   const baseColors: THREE.Color[] = [];
+  const clones=new Map<THREE.Material,THREE.Material>();
   object.traverse((child) => {
     if (!(child instanceof THREE.Mesh)) {
       return;
     }
     const sourceMaterials = Array.isArray(child.material) ? child.material : [child.material];
     const clonedMaterials = sourceMaterials.map((material) => {
+      const existing=clones.get(material);
+      if(existing) return existing;
       const clone = material.clone();
+      clones.set(material,clone);
       if (clone instanceof THREE.MeshStandardMaterial) {
         materials.push(clone);
         baseColors.push(clone.color.clone());

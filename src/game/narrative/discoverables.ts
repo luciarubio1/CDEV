@@ -185,8 +185,8 @@ export class DiscoverableSystem {
     });
   }
 
-  get foundCount(): number { return this.entries.filter((entry) => entry.found).length; }
-  get totalCount(): number { return this.entries.length; }
+  get foundCount(): number { return this.entries.filter((entry) => entry.found && !entry.definition.epilogueOnly).length; }
+  get totalCount(): number { return DISCOVERABLES.length; }
   get epilogueFoundCount(): number { return this.entries.filter((entry) => entry.definition.epilogueOnly && entry.found).length; }
   get epilogueTotalCount(): number { return EPILOGUE_DISCOVERABLES.length; }
   get epilogueDiscovered(): readonly DiscoverableDefinition[] { return this.entries.filter((entry) => entry.definition.epilogueOnly && entry.found).map((entry) => entry.definition); }

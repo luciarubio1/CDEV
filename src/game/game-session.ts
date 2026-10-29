@@ -2,7 +2,7 @@ import { PostFireProgression } from './narrative/post-fire-progression';
 
 export type DefeatReason = 'player' | 'house' | 'forest';
 export type GameResult = DefeatReason | 'victory';
-export type GamePhase = 'mission' | 'reinforcements' | 'companion-dialogue' | 'review' | 'results' | 'defeat';
+export type GamePhase = 'mission' | 'reinforcements' | 'companion-dialogue' | 'review' | 'closing' | 'results' | 'defeat';
 
 export class GameSession {
   readonly postFire = new PostFireProgression();
@@ -24,6 +24,8 @@ export class GameSession {
   get currentPhase(): GamePhase { return this.phase; }
   get isContainment(): boolean { return this.phase === 'reinforcements'; }
   get isEpilogue(): boolean { return this.phase === 'review'; }
+  get isClosing(): boolean { return this.phase === 'closing'; }
+  beginClosing(): void { if (!this.result && this.isEpilogue && this.postFire.rescueCompleted) this.phase = 'closing'; }
   get isCompanionDialogue(): boolean { return this.phase === 'companion-dialogue'; }
   get interventionClosed(): boolean { return this.phase !== 'mission' && this.phase !== 'defeat'; }
   get isMissionActive(): boolean { return this.phase === 'mission'; }
@@ -36,7 +38,7 @@ export class GameSession {
   }
 
   win(): void {
-    if (!this.result) {
+    if (!this.result && this.isClosing) {
       this.result = 'victory';
       this.phase = 'results';
     }

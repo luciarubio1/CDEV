@@ -8,11 +8,6 @@ export const RADIO_INTERACTION_RADIUS = 2.5;
 
 export type MissionStage = 'idle' | 'access' | 'radio' | 'house' | 'forest' | 'complete';
 
-interface MissionMarker {
-  source: FireSource;
-  object: THREE.Group;
-}
-
 export interface MissionUpdate {
   victory: boolean;
   failure: 'forest' | null;
@@ -25,30 +20,6 @@ export interface MissionNavigationTarget {
   priority: number;
 }
 
-function createMarker(color: number): THREE.Group {
-  const marker = new THREE.Group();
-  const beam = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.06, 0.13, 3.2, 12),
-    new THREE.MeshStandardMaterial({
-      color,
-      emissive: color,
-      emissiveIntensity: 0.6,
-      transparent: true,
-      opacity: 0.8,
-    }),
-  );
-  beam.position.y = 2;
-  marker.add(beam);
-  const pointer = new THREE.Mesh(
-    new THREE.ConeGeometry(0.45, 0.9, 16),
-    new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.35 }),
-  );
-  pointer.position.y = 0.7;
-  pointer.rotation.x = Math.PI;
-  marker.add(pointer);
-  return marker;
-}
-
 function createRadio(): THREE.Group {
   const radio = new THREE.Group();
   const dark = new THREE.MeshStandardMaterial({ color: 0x243238, roughness: 0.75 });
@@ -59,6 +30,8 @@ function createRadio(): THREE.Group {
     roughness: 0.5,
   });
   const body = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.52, 0.25), dark);
+  const support = new THREE.Mesh(new THREE.BoxGeometry(.56,.16,.36),dark);
+  support.position.y = .08; radio.add(support);
   body.position.y = 0.42;
   radio.add(body);
   const screen = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.17, 0.02), accent);
@@ -77,7 +50,6 @@ export class MissionDirector {
   readonly radioPosition: THREE.Vector3;
   private stage: MissionStage = 'idle';
   private readonly radio = createRadio();
-  private readonly markers: MissionMarker[] = [];
   private accessFire: FireSource | null = null;
   private readonly criticalFires: FireSource[] = [];
   private notification = '';
@@ -124,7 +96,7 @@ export class MissionDirector {
   startAfterPreparation(): void {
     if (this.stage !== 'idle') return;
     this.stage = 'access';
-    this.accessFire = this.createMissionFire(ACCESS_FIRE_POSITION, 1, 0xffb347);
+    this.accessFire = this.createMissionFire(ACCESS_FIRE_POSITION, 1);
     this.announce('Contené el acceso; después solicitaremos apoyo por radio.');
   }
   isNearRadio(position: THREE.Vector3): boolean {
@@ -139,10 +111,6 @@ export class MissionDirector {
   }
   update(delta: number, _context: FireUpdateContext, _houseRiskRatio: number): MissionUpdate {
     this.notificationRemaining = Math.max(0, this.notificationRemaining - delta);
-    this.markers.forEach((marker) => {
-      marker.object.visible = marker.source.isActive;
-      marker.object.rotation.y += delta * 0.8;
-    });
     if (this.stage === 'access' && this.accessFire && !this.accessFire.isActive) {
       this.stage = 'radio';
       this.radio.visible = true;
@@ -164,17 +132,13 @@ export class MissionDirector {
     this.criticalFires.length = 0;
     const sector = getMissionBranch(route);
     sector.criticalFirePositions.forEach((position) => {
-      this.criticalFires.push(this.createMissionFire(position, sector.criticalIntensity, sector.markerColor));
+      this.criticalFires.push(this.createMissionFire(position, sector.criticalIntensity));
     });
   }
-  private createMissionFire(position: THREE.Vector3, intensity: number, color: number): FireSource {
+  private createMissionFire(position: THREE.Vector3, intensity: number): FireSource {
     const grounded = position.clone();
     grounded.y = this.getTerrainHeight(grounded.x, grounded.z);
     const source = this.fireSystem.addSource({ position: grounded, intensity, kind: this.stage === 'access' ? 'common' : 'critical' });
-    const marker = createMarker(color);
-    marker.position.copy(grounded);
-    this.object.add(marker);
-    this.markers.push({ source, object: marker });
     return source;
   }
   private navigationTarget(position: THREE.Vector3, label: string, priority: number): MissionNavigationTarget {

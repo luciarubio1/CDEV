@@ -9,6 +9,8 @@ import type { VeterinarianView } from '../world/veterinarian-view';
 import type { FaunaAnimals } from '../world/fauna-animals';
 import { WildlifeRescueView } from '../world/wildlife-rescue-view';
 import { CARRIER_SIZE } from '../world/animal-carrier';
+import { FollowDistanceGate, NPC_MOVEMENT, turnTowards } from './npc-movement';
+import { RescueCamera } from './rescue-camera';
 
 export class WildlifeRescue {
   readonly view: WildlifeRescueView;
@@ -18,6 +20,9 @@ export class WildlifeRescue {
   private transport: WaypointWalker | null = null;
   private companionWalk: WaypointWalker | null = null;
   private waiting = false;
+  private readonly following = new FollowDistanceGate();
+  readonly rescueCamera: RescueCamera;
+  private skipping = false;
 
   constructor(
     private readonly flow: PostFireProgression,
@@ -32,10 +37,12 @@ export class WildlifeRescue {
     private readonly completed: () => void,
   ) {
     this.view = new WildlifeRescueView(carrier, animals, vet, terrain);
+    this.rescueCamera = new RescueCamera(camera, collisions, terrain);
   }
   get isActive(): boolean { return this.activated; }
   get isPlayerCarrying(): boolean { return this.flow.currentStage === 'carrier-carrying' || this.flow.currentStage === 'rescue-identification'; }
   get isWaiting(): boolean { return this.waiting; }
+  get cameraLocked(): boolean { return this.rescueCamera.active; }
   constrainPlayerMovement(previous: THREE.Vector3, desired: THREE.Vector3): THREE.Vector3 {
     return this.isPlayerCarrying ? this.view.carrying.constrainMovement(this.camera, this.carrier, previous, desired, this.collisions) : desired;
   }
@@ -78,7 +85,8 @@ export class WildlifeRescue {
     if (stage === 'rescue-identification' && this.flow.advanceFauna('rescue-loading')) {
       this.elapsed = 0;
       this.view.beginLoading();
-      this.companionWalk = new WaypointWalker([this.companion.companionPosition.clone(), new THREE.Vector3(3,0,19.4)], 0.9, this.terrain);
+      this.rescueCamera.begin(this.vet.object, this.carrier);
+      this.companionWalk = new WaypointWalker([this.companion.companionPosition.clone(), new THREE.Vector3(3,0,19.4)], NPC_MOVEMENT.companionSpeed, this.terrain);
     } else if (stage === 'rescue-ready' && this.flow.advanceFauna('rescue-walk')) {
       this.transport = new WaypointWalker(RESCUE_CONFIG.transportRoute, RESCUE_CONFIG.veterinarianSpeed, this.terrain);
       this.companionWalk = new WaypointWalker([this.companion.companionPosition.clone(), ...RESCUE_CONFIG.companionRoute.slice(1)], RESCUE_CONFIG.companionSpeed, this.terrain);
@@ -98,15 +106,15 @@ export class WildlifeRescue {
       this.view.renderLoading(this.elapsed / RESCUE_CONFIG.loadingSeconds);
       if (this.elapsed >= RESCUE_CONFIG.loadingSeconds && this.flow.advanceFauna('rescue-ready')) {
         this.view.finishLoading();
-        this.dialogue('Veterinario', RESCUE_TEXT.departure);
+        if (!this.skipping) this.dialogue('Veterinario', RESCUE_TEXT.departure);
       }
     } else if (stage === 'rescue-walk' && this.transport) {
-      this.waiting = Math.hypot(player.x - this.vet.object.position.x, player.z - this.vet.object.position.z) > RESCUE_CONFIG.followRadius;
-      this.transport.update(delta, !this.waiting);
+      const distance = Math.hypot(player.x - this.vet.object.position.x, player.z - this.vet.object.position.z);
+      this.waiting = this.cameraLocked ? false : !this.following.update(distance);
+      this.transport.update(delta, !this.waiting, this.cameraLocked ? 1 : this.following.speedScale(distance));
       this.vet.object.position.copy(this.transport.position);
       const targetYaw = Math.atan2(this.transport.direction.x, this.transport.direction.z);
-      const turn = Math.atan2(Math.sin(targetYaw-this.vet.object.rotation.y), Math.cos(targetYaw-this.vet.object.rotation.y));
-      this.vet.object.rotation.y += turn * (1-Math.exp(-6*delta));
+      turnTowards(this.vet.object, targetYaw, delta);
       if (this.transport.finished && !this.waiting && this.flow.advanceFauna('rescue-placing')) {
         this.elapsed = 0;
         this.view.beginPlacement();
@@ -116,16 +124,28 @@ export class WildlifeRescue {
       this.view.renderPlacement(this.elapsed / RESCUE_CONFIG.placementSeconds);
       if (this.elapsed >= RESCUE_CONFIG.placementSeconds && this.flow.advanceFauna('rescue-arrival')) {
         this.view.finishPlacement();
+        this.rescueCamera.restore(this.vet.object.position);
         this.dialogue('Veterinario', RESCUE_TEXT.arrival);
       }
     }
+    this.rescueCamera.update(delta, this.vet.object, this.carrier);
+  }
+  skip(): void {
+    if (!this.cameraLocked || this.skipping) return;
+    this.skipping = true;
+    // Run exactly the same fixed-step timeline; keep dialogue/rewards at the final boundary.
+    for (let i = 0; i < 20000 && this.cameraLocked; i++) {
+      if (this.flow.currentStage === 'rescue-ready') this.continueDialogue();
+      this.update(1 / 60, this.vet.object.position, false);
+    }
+    this.skipping = false;
   }
   private updateCompanion(delta: number): void {
     if (!this.companionWalk || this.companionWalk.finished) return;
     const tooClose = this.transport && !this.transport.finished && this.companion.companionPosition.distanceTo(this.vet.object.position) < 1.6;
     this.companionWalk.update(delta, !tooClose);
     this.companion.moveCompanion(this.companionWalk.position);
-    this.companion.companion.rotation.y = Math.atan2(this.companionWalk.direction.x, this.companionWalk.direction.z);
+    turnTowards(this.companion.companion, Math.atan2(this.companionWalk.direction.x, this.companionWalk.direction.z), delta);
   }
   private near(a: THREE.Vector3, b: THREE.Vector3): boolean { return Math.hypot(a.x-b.x, a.z-b.z) <= RESCUE_CONFIG.interactionRadius; }
 }

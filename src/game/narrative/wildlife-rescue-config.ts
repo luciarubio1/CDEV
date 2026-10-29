@@ -1,12 +1,13 @@
 import * as THREE from 'three';
+import { NPC_MOVEMENT } from './npc-movement';
 const point = (x: number, z: number): THREE.Vector3 => new THREE.Vector3(x, 0, z);
 const meeting = point(-12, 10.8);
 export const RESCUE_CONFIG = {
   loadingSeconds: 9,
   placementSeconds: 4,
-  veterinarianSpeed: 0.7,
-  companionSpeed: 0.9,
-  followRadius: 5.5,
+  veterinarianSpeed: NPC_MOVEMENT.loadedVeterinarianSpeed,
+  companionSpeed: NPC_MOVEMENT.companionSpeed,
+  followRadius: NPC_MOVEMENT.stopDistance,
   interactionRadius: 2.5,
   foxScale: 0.65,
   loadingVeterinarian: point(4.3, 16),

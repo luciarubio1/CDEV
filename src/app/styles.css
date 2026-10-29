@@ -862,50 +862,6 @@ canvas {
   text-align: center;
 }
 
-.defeat-summary {
-  padding: 18px;
-  border: 1px solid rgb(255 255 255 / 12%);
-  border-radius: 9px;
-  background: rgb(0 0 0 / 18%);
-}
-
-.defeat-summary h2 {
-  margin: 0 0 14px;
-  color: #ffcf68;
-  font-size: 16px;
-}
-
-.defeat-summary dl {
-  display: grid;
-  margin: 0;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 9px;
-}
-
-.defeat-summary dl div {
-  display: flex;
-  min-width: 0;
-  padding: 10px;
-  flex-direction: column;
-  gap: 4px;
-  border-radius: 6px;
-  background: rgb(255 255 255 / 5%);
-}
-
-.defeat-summary dt {
-  color: #b9c7c0;
-  font-size: 12px;
-  line-height: 1.25;
-}
-
-.defeat-summary dd {
-  margin: 0;
-  color: #ffffff;
-  font-size: 18px;
-  font-weight: bold;
-  overflow-wrap: anywhere;
-}
-
 .defeat-actions {
   display: flex;
   justify-content: flex-end;
@@ -1153,10 +1109,6 @@ canvas {
     padding: 14px;
   }
 
-  .defeat-summary dl {
-    grid-template-columns: 1fr;
-  }
-
   .defeat-actions {
     flex-direction: column;
   }
@@ -1165,3 +1117,14 @@ canvas {
     width: 100%;
   }
 }
+.awareness-ending .defeat-card { width: min(100%, 760px); border-color: #82b7a0; background: linear-gradient(145deg, #182e29, #14201e); }
+.awareness-ending .defeat-card > strong { color: #b4d8c8; }
+.awareness-ending .defeat-card h1 { color: #f1eee0; font-size: clamp(1.75rem, 4vw, 2.5rem); line-height: 1.15; }
+.awareness-ideas { list-style: none; display: grid; gap: .8rem; padding: 0; margin: 0; }
+.awareness-ideas li { display: grid; grid-template-columns: 105px 1fr; gap: 1rem; border-left: 3px solid #88baa1; padding: .7rem 1rem; background: #ffffff08; border-radius: 4px; color: #e1ebe2; line-height: 1.45; }
+.awareness-ideas li strong { color: #b4d8c8; text-align: left; letter-spacing: 0; text-transform: none; }
+@media (max-width: 520px) { .awareness-ideas li { grid-template-columns: 1fr; gap: .3rem; } }
+.discoverable-card__panel p { white-space: pre-line; }
+.discoverable-card__panel button { margin: .35rem; }
+.inspection-cigarette { padding: 1rem; border: 1px solid #7b8d81; border-radius: .75rem; color: #c8d6ce; text-align: center; font-size: .85rem; }
+.inspection-cigarette::before { content: ''; display: block; width: 110px; height: 22px; margin: .5rem auto 1rem; border-radius: 3px; transform: rotate(-12deg); background: linear-gradient(90deg, #c59650 0 58%, #e3dfcc 58% 90%, #59534b 90%); box-shadow: 0 3px 8px #0008; }

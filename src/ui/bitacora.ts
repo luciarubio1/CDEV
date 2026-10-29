@@ -13,6 +13,10 @@ export class Bitacora {
   private readonly detailTitle: HTMLHeadingElement;
   private readonly detailText: HTMLParagraphElement;
   private readonly logContent: HTMLDivElement;
+  private readonly choices = document.createElement('div');
+  private readonly illustration = document.createElement('div');
+  private pendingAnswer = false;
+  private afterDetail: (() => void) | null = null;
 
   constructor(app: HTMLElement, private readonly onClose: () => void) {
     this.detail.className = 'discoverable-card';
@@ -30,6 +34,11 @@ export class Bitacora {
     app.append(this.detail, this.log);
     this.detailTitle = this.detail.querySelector<HTMLHeadingElement>('h2')!;
     this.detailText = this.detail.querySelector<HTMLParagraphElement>('p')!;
+    this.detailText.after(this.choices);
+    this.detailText.after(this.illustration);
+    this.illustration.className = 'inspection-cigarette';
+    this.illustration.textContent = 'Vista ampliada · colilla apagada';
+    this.illustration.hidden = true;
     this.logContent = this.log.querySelector<HTMLDivElement>('.bitacora__panel div')!;
     this.detail.querySelector('button')?.addEventListener('click', () => this.close());
     this.log.querySelector('button')?.addEventListener('click', () => this.close());
@@ -37,11 +46,42 @@ export class Bitacora {
 
   get isOpen(): boolean { return this.detail.classList.contains('visible') || this.log.classList.contains('visible'); }
   get unlockedEntries(): readonly BitacoraEntry[] { return [...this.unlocked.values()]; }
+  get requiresAnswer(): boolean { return this.pendingAnswer; }
+  showQuestion(item: BitacoraEntry, question: string, options: readonly string[], answer: (option: number) => string, done: () => void): void {
+    this.detail.querySelector('strong')!.textContent = 'Compañero · observación';
+    this.illustration.hidden = item.id !== 'investigation-cigarette';
+    this.detailTitle.textContent = item.title;
+    this.detailText.textContent = `${item.text}\n\n${question}`;
+    this.pendingAnswer = true;
+    this.afterDetail = done;
+    this.choices.replaceChildren();
+    const next = this.detail.querySelector<HTMLButtonElement>('button')!;
+    next.hidden = true;
+    options.forEach((option, index) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = option;
+      button.addEventListener('keydown', (event) => { if (event.repeat) event.preventDefault(); });
+      button.addEventListener('click', () => {
+        if (!this.pendingAnswer) return;
+        this.pendingAnswer = false;
+        this.detailText.textContent = answer(index);
+        this.choices.replaceChildren();
+        next.hidden = false;
+        next.focus();
+      });
+      this.choices.append(button);
+    });
+    this.detail.classList.add('visible');
+    this.choices.querySelector<HTMLButtonElement>('button')?.focus();
+  }
   unlockEntry(item: BitacoraEntry & { id: string }): void {
     if (!this.unlocked.has(item.id)) this.unlocked.set(item.id, item);
   }
 
   showDiscoverable(item: DiscoverableDefinition): void {
+    this.detail.querySelector('strong')!.textContent = 'Hallazgo educativo';
+    this.illustration.hidden = true;
     this.detailTitle.textContent = item.title;
     this.detailText.textContent = item.text;
     this.detail.classList.add('visible');
@@ -85,9 +125,12 @@ export class Bitacora {
   }
 
   close(): void {
-    if (!this.isOpen) return;
+    if (!this.isOpen || this.pendingAnswer) return;
     this.detail.classList.remove('visible');
     this.log.classList.remove('visible');
     this.onClose();
+    const done = this.afterDetail;
+    this.afterDetail = null;
+    done?.();
   }
 }

@@ -1,5 +1,8 @@
 import * as THREE from 'three';
 import { FIRE_TRUCK_POSITION } from '../world/fire-truck';
+import { truckAnchorWorld, type TruckAnchor } from '../world/truck-model';
+import { createSuitStand } from '../world/preparation-equipment';
+import type { CollisionSystem } from '../world/collision-system';
 
 export const PREPARATION_INTERACTION_RADIUS = 2.4;
 
@@ -37,10 +40,26 @@ interface PreparationPoint {
   task: PreparationTask;
   object: THREE.Group;
   completed: boolean;
+  interactionPosition: THREE.Vector3;
 }
 
-function createPointVisual(task: PreparationTask): THREE.Group {
+function createPointVisual(task: PreparationTask, truck?: THREE.Group): THREE.Group {
   const point = new THREE.Group();
+  if (truck) {
+    if (task.id === 'suit') {
+      const stand = createSuitStand(); point.add(stand); point.position.copy(task.position);
+      const anchor = new THREE.Group(); anchor.name='truck-preparation-suit';
+      anchor.position.copy(task.position); truck.worldToLocal(anchor.position); truck.add(anchor);
+      return point;
+    }
+    const anchors: Record<PreparationTaskId, TruckAnchor> = { suit: 'equipment-left', hose: 'hose-rack', connection: 'connection-right' };
+    const socket = truck.getObjectByName(`truck-${anchors[task.id]}`)!;
+    truckAnchorWorld(truck, anchors[task.id], point.position);
+    socket.getWorldQuaternion(point.quaternion);
+    const marker = new THREE.Mesh(new THREE.TorusGeometry(.21,.025,6,16), new THREE.MeshStandardMaterial({ color: 0xffd778, emissive: 0x705020, emissiveIntensity: .4 }));
+    marker.name='preparation-marker'; marker.position.z = .07; point.add(marker);
+    return point;
+  }
   const base = new THREE.Mesh(
     new THREE.CylinderGeometry(0.48, 0.62, 0.16, 16),
     new THREE.MeshStandardMaterial({ color: 0x34483b, roughness: 0.8 }),
@@ -93,13 +112,22 @@ function createPointVisual(task: PreparationTask): THREE.Group {
 export class PreparationSequence {
   readonly object = new THREE.Group();
 
-  private readonly points = PREPARATION_TASKS.map((task) => {
-    const object = createPointVisual(task);
+  private readonly points: PreparationPoint[];
+  constructor(private readonly truck?: THREE.Group, collisions?: CollisionSystem) {
+    this.points = PREPARATION_TASKS.map((task) => {
+    const object = createPointVisual(task, truck);
     this.object.add(object);
-    return { task, object, completed: false };
-  });
+    const interactionPosition = object.position.clone(); interactionPosition.y = task.position.y;
+    return { task, object, completed: false, interactionPosition };
+    });
+    if (truck && collisions) {
+      collisions.addCircle(PREPARATION_TASKS[0].position,.3);
+      collisions.addCircle(this.points[1].interactionPosition,.24);
+    }
+  }
   private currentTaskIndex = 0;
   private elapsed = 0;
+  private available = true;
 
   get isComplete(): boolean {
     return this.currentTaskIndex >= this.points.length;
@@ -114,7 +142,12 @@ export class PreparationSequence {
   }
 
   setAvailable(available: boolean): void {
-    this.object.visible = available;
+    this.available=available;
+    this.object.visible = this.truck ? true : available;
+    for(const point of this.points) {
+      const marker=point.object.getObjectByName('preparation-marker');
+      if(marker) marker.visible=available&&!point.completed;
+    }
   }
 
   isTaskCompleted(taskId: PreparationTaskId): boolean {
@@ -122,15 +155,16 @@ export class PreparationSequence {
   }
 
   getNearbyTask(position: THREE.Vector3): PreparationTask | null {
+    if(!this.available) return null;
     const nearbyPoint = this.points
       .filter(
         (point) =>
-          position.distanceTo(point.task.position) <= PREPARATION_INTERACTION_RADIUS,
+          position.distanceTo(point.interactionPosition) <= PREPARATION_INTERACTION_RADIUS,
       )
       .sort(
         (first, second) =>
-          position.distanceTo(first.task.position) -
-          position.distanceTo(second.task.position),
+          position.distanceTo(first.interactionPosition) -
+          position.distanceTo(second.interactionPosition),
       )[0];
     return nearbyPoint?.task ?? null;
   }
@@ -152,14 +186,21 @@ export class PreparationSequence {
   completeCurrentTask(position: THREE.Vector3): PreparationTask | null {
     const currentPoint = this.points[this.currentTaskIndex];
     if (
-      !currentPoint ||
-      position.distanceTo(currentPoint.task.position) > PREPARATION_INTERACTION_RADIUS
+      !this.available || !currentPoint ||
+      position.distanceTo(currentPoint.interactionPosition) > PREPARATION_INTERACTION_RADIUS
     ) {
       return null;
     }
 
     currentPoint.completed = true;
-    currentPoint.object.visible = false;
+    if (this.truck && currentPoint.task.id === 'suit') {
+      currentPoint.object.getObjectByName('stored-suit')!.visible=false;
+    } else currentPoint.object.visible = false;
+    if (this.truck && currentPoint.task.id === 'hose') this.truck.getObjectByName('stored-hose')!.visible=false;
+    if (this.truck && currentPoint.task.id === 'connection') {
+      this.truck.getObjectByName('connection-cap')!.visible=false;
+      this.truck.getObjectByName('connected-hose')!.visible=true;
+    }
     this.currentTaskIndex += 1;
     return currentPoint.task;
   }
@@ -170,6 +211,7 @@ export class PreparationSequence {
       if (point.completed) {
         return;
       }
+      if (this.truck) return; // Mounted highlights remain fixed to the equipment.
       point.object.position.y =
         point.task.position.y + 0.08 + Math.sin(this.elapsed * 2 + index) * 0.06;
       point.object.rotation.y += delta * 0.45;
