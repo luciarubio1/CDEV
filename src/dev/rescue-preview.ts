@@ -13,6 +13,7 @@ import { createTerrain, getTerrainHeight } from '../game/world/terrain';
 import { createFireTruck, FIRE_TRUCK_POSITION } from '../game/world/fire-truck';
 import { ObjectiveCompass } from '../ui/hud/objective-compass';
 import { Bitacora } from '../ui/bitacora';
+import { animateCharacters } from '../game/npc/character-model';
 import '../app/styles.css';
 
 const app = document.querySelector<HTMLElement>('#app')!;
@@ -62,13 +63,16 @@ const vetCollider = collision.addCircle(tour.veterinarian.object.position,0.4);
 tour.carrier.visible = true; tour.rescue.activate(); world.add(tour.object);
 function closeDialogue(): void {
   dialogOpen = false; dialog.classList.remove('visible');
-  tour.continueDialogue(); if (!dialogOpen) controls.lock();
+  tour.continueDialogue();
+  if (tour.rescue.cameraLocked) controls.unlock();
+  else if (!dialogOpen) controls.lock();
 }
 button.addEventListener('click',closeDialogue);
-renderer.domElement.addEventListener('click', () => { if (!dialogOpen && !log.isOpen) controls.lock(); });
+renderer.domElement.addEventListener('click', () => { if (!dialogOpen && !log.isOpen && !tour.rescue.cameraLocked) controls.lock(); });
 window.addEventListener('keydown',(event) => {
   const repeated = held.has(event.code) || event.repeat; held.add(event.code);
   if(dialogOpen) { if(event.code==='Enter') { event.preventDefault(); if(!repeated) closeDialogue(); } return; }
+  if(tour.rescue.cameraLocked) { if(event.code==='Space' && !repeated) { event.preventDefault(); tour.rescue.skip(); } return; }
   if(log.isOpen) { if(event.code==='Enter' || event.code==='Escape') { event.preventDefault(); log.close(); } return; }
   if(event.code==='KeyB' && !repeated) { keys.clear(); controls.unlock(); log.showLog([]); return; }
   if(!controls.isLocked) return;
@@ -81,7 +85,11 @@ controls.addEventListener('unlock',() => keys.clear());
 const clock = new THREE.Clock(), compass = new ObjectiveCompass(app), forward = new THREE.Vector3();
 renderer.setAnimationLoop(() => {
   const delta = Math.min(clock.getDelta(),0.1);
-  const paused = !controls.isLocked || dialogOpen || log.isOpen || !document.hasFocus();
+  const paused = !controls.isLocked || dialogOpen || log.isOpen || !document.hasFocus() || tour.rescue.cameraLocked;
+  if (tour.rescue.cameraLocked && !dialogOpen && !log.isOpen && document.hasFocus()) {
+    tour.animals.update(delta); tour.rescue.update(delta,camera.position,false);
+    companionCollider.copy(companion.companionPosition); vetCollider.copy(tour.veterinarian.object.position);
+  }
   if(!paused) {
     const before = camera.position.clone();
     const movement = new THREE.Vector2(Number(keys.has('KeyD'))-Number(keys.has('KeyA')),Number(keys.has('KeyW'))-Number(keys.has('KeyS'))).normalize().multiplyScalar(3.2*delta);
@@ -97,6 +105,7 @@ renderer.setAnimationLoop(() => {
   interaction.textContent = tour.rescue.interactionMessage(camera.position) ?? '';
   camera.getWorldDirection(forward);
   compass.update(camera.position,forward,tour.rescue.navigationTarget,null,!dialogOpen && !log.isOpen);
+  animateCharacters(world,delta,camera.position,dialogOpen);
   renderer.render(world,camera);
 });
 window.addEventListener('resize',() => {

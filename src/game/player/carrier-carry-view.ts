@@ -28,7 +28,11 @@ export class CarrierCarryView {
     this.object.add(carrier);
     carrier.position.set(0, -0.95, -1.55);
     carrier.rotation.set(0, 0, 0);
-    this.hands.forEach((hand) => carrier.add(hand));
+    this.hands.forEach((hand,index) => {
+      const grip = carrier.getObjectByName(index === 0 ? 'carrier-player-grip-left' : 'carrier-player-grip-right');
+      if (grip) hand.position.copy(grip.position);
+      carrier.add(hand);
+    });
     carrier.visible = this.object.visible = true;
   }
   release(parent: THREE.Object3D, carrier: THREE.Group): void {

@@ -18,7 +18,7 @@ export class FaunaAnimals {
   private elapsed = 0;
   private readonly legs: THREE.Object3D[] = [];
   constructor(private readonly terrain: (x: number, z: number) => number) {
-    const grey = material(0x867d68), cream = material(0xe4d3b2), rust = material(0xb36b35), dark = material(0x34302b);
+    const grey = material(0x867d68), cream = material(0xe4d3b2), dark = material(0x34302b);
     ellipsoid(this.smallAnimal, grey, 0, 0.22, 0, 0.22, 0.18, 0.14);
     ellipsoid(this.smallAnimal, grey, 0.2, 0.31, 0, 0.11, 0.12, 0.1);
     for (const z of [-0.055, 0.055]) {
@@ -39,12 +39,12 @@ export class FaunaAnimals {
     this.fox.name = 'zorro-en-evaluacion';
     this.foxBody = ellipsoid(this.fox, grey, 0, 0.36, 0, 0.43, 0.22, 0.18);
     ellipsoid(this.fox, cream, 0.23, 0.4, 0, 0.18, 0.16, 0.15);
-    ellipsoid(this.fox, rust, 0.4, 0.55, 0, 0.18, 0.17, 0.14);
+    ellipsoid(this.fox, grey, 0.4, 0.55, 0, 0.18, 0.17, 0.14);
     const muzzle = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.25, 8), cream);
     muzzle.rotation.z = -Math.PI / 2; muzzle.position.set(0.61, 0.52, 0); this.fox.add(muzzle);
     ellipsoid(this.fox, dark, 0.74, 0.52, 0, 0.035, 0.035, 0.04);
     for (const z of [-0.11, 0.11]) {
-      const ear = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.22, 4), rust);
+      const ear = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.22, 4), grey);
       ear.position.set(0.39, 0.77, z); this.fox.add(ear);
       ellipsoid(this.fox, dark, 0.49, 0.6, z * 1.16, 0.024, 0.024, 0.018);
       for (const x of [-0.26, 0.25]) {

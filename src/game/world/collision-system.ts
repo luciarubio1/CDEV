@@ -26,6 +26,7 @@ type Collider = CircleCollider | RectangleCollider;
  */
 export class CollisionSystem {
   private readonly colliders: Collider[] = [];
+  private readonly visualProbe=new THREE.Vector3();
 
   addCircle(center: THREE.Vector3, radius: number): THREE.Vector3 {
     const colliderCenter = center.clone();
@@ -98,5 +99,9 @@ export class CollisionSystem {
 
   canOccupy(position: THREE.Vector3, radius = PLAYER_COLLISION_RADIUS): boolean {
     return !this.isBlocked(position, radius);
+  }
+  canOccupyXZ(x:number,z:number,radius=PLAYER_COLLISION_RADIUS):boolean {
+    this.visualProbe.set(x,0,z);
+    return !this.isBlocked(this.visualProbe,radius);
   }
 }

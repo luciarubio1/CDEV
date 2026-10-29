@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { FAUNA_CONFIG } from './fauna-config';
 import { WaypointWalker } from './waypoint-walker';
+import { FollowDistanceGate, turnTowards } from './npc-movement';
 import type { PostFireProgression } from './post-fire-progression';
 import type { ReinforcementView } from '../world/reinforcement-view';
 import type { CollisionSystem } from '../world/collision-system';
@@ -21,6 +22,7 @@ export class FaunaTour {
   private vetCollider: THREE.Vector3 | null = null;
   private evaluationElapsed = 0;
   private waiting = false;
+  private readonly following = new FollowDistanceGate();
   private started = false;
   private reported = false;
 
@@ -70,10 +72,11 @@ export class FaunaTour {
     }
     const stage = this.flow.currentStage;
     if ((stage === 'fauna-walk-a' || stage === 'fauna-walk-b') && this.walker) {
-      this.waiting = this.distance(player, this.walker.position) > FAUNA_CONFIG.followRadius;
-      this.walker.update(delta, !this.waiting);
+      const distance = this.distance(player, this.walker.position);
+      this.waiting = !this.following.update(distance);
+      this.walker.update(delta, !this.waiting, this.following.speedScale(distance));
       this.companion.moveCompanion(this.walker.position);
-      this.companion.companion.rotation.y = Math.atan2(this.walker.direction.x, this.walker.direction.z);
+      turnTowards(this.companion.companion, Math.atan2(this.walker.direction.x, this.walker.direction.z), delta);
       if (this.walker.finished && !this.waiting) {
         if (stage === 'fauna-walk-a') this.flow.advanceFauna('fauna-refuge');
         else if (this.flow.advanceFauna('fauna-dialogue-b')) this.showDialogue('Compañero', 'Este necesita que lo revise el equipo de fauna. Avisemos al veterinario.');

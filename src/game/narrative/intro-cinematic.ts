@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { FlameView } from '../fire/flame-view';
 
 export const INTRO_CINEMATIC_DURATION = 12.5;
 
@@ -28,16 +29,9 @@ function smooth(value: number): number {
   return clamped * clamped * (3 - 2 * clamped);
 }
 
-function createDistantFire(): THREE.Group {
+function createDistantFire(flames:FlameView): THREE.Group {
   const fire = new THREE.Group();
-  const outer = new THREE.MeshStandardMaterial({ color: 0xf36a21, emissive: 0xb82e12, emissiveIntensity: 1.6 });
-  const inner = new THREE.MeshStandardMaterial({ color: 0xffd166, emissive: 0xff8c1a, emissiveIntensity: 1.2 });
-  const flame = new THREE.Mesh(new THREE.ConeGeometry(0.36, 1.35, 8), outer);
-  flame.position.y = 0.68;
-  fire.add(flame);
-  const core = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.8, 8), inner);
-  core.position.set(0.1, 0.45, 0);
-  fire.add(core);
+  fire.add(flames.object);
   [0, 1, 2].forEach((index) => {
     const smoke = new THREE.Mesh(
       new THREE.SphereGeometry(0.18 + index * 0.06, 8, 6),
@@ -52,7 +46,8 @@ function createDistantFire(): THREE.Group {
 /** Cámara narrativa breve; no inicia mecánicas de juego. */
 export class IntroCinematic {
   readonly object = new THREE.Group();
-  private readonly fire = createDistantFire();
+  private readonly flames=new FlameView(new THREE.Vector3(),false,.65);
+  private readonly fire = createDistantFire(this.flames);
   private elapsed = 0;
   private active = false;
   private sirenPlayed = false;
@@ -84,8 +79,7 @@ export class IntroCinematic {
     camera.position.lerpVectors(shot.position, next.position, progress);
     this.interpolatedTarget.lerpVectors(shot.target, next.target, progress);
     camera.lookAt(this.interpolatedTarget);
-    this.fire.rotation.y += delta * 1.2;
-    this.fire.scale.y = 0.92 + Math.sin(this.elapsed * 8) * 0.08;
+    this.flames.update(delta,1);
 
     const sirenCue = !this.sirenPlayed && this.elapsed >= 4.2;
     if (sirenCue) this.sirenPlayed = true;

@@ -1,13 +1,15 @@
 import * as THREE from 'three';
+import { LANDSCAPE_COLORS as C } from './landscape-config';
+import { distanceToRoad, ROAD_HALF_WIDTH } from './road-layout';
 
 export const TERRAIN_MAP_HALF_SIZE = 25;
 export const TERRAIN_SEGMENTS = 96;
 /** Altura máxima aproximada de las lomas, en unidades de mundo. */
 export const TERRAIN_HEIGHT_AMPLITUDE = 2.1;
 export const TERRAIN_COLORS = {
-  drySoil: new THREE.Color(0x806642),
-  ochre: new THREE.Color(0x9c7a48),
-  mutedGreen: new THREE.Color(0x66704a),
+  drySoil: new THREE.Color(C.soil),
+  ochre: new THREE.Color(C.ochre),
+  mutedGreen: new THREE.Color(C.dryGreen),
   ash: new THREE.Color(0x4d4940),
 };
 
@@ -55,6 +57,7 @@ export function createTerrain(): THREE.Mesh {
   const positions = geometry.attributes.position;
   const colors = new Float32Array(positions.count * 3);
   const color = new THREE.Color();
+  const roadColor=new THREE.Color(C.road), stoneColor=new THREE.Color(C.stone);
 
   for (let index = 0; index < positions.count; index += 1) {
     const x = positions.getX(index);
@@ -62,9 +65,11 @@ export function createTerrain(): THREE.Mesh {
     const height = getTerrainHeight(x, z);
     positions.setY(index, height);
 
-    const variation = (Math.sin(x * 0.7 + z * 0.31) + 1) * 0.5;
-    color.copy(TERRAIN_COLORS.drySoil).lerp(TERRAIN_COLORS.ochre, variation * 0.45);
-    color.lerp(TERRAIN_COLORS.mutedGreen, Math.max(0, z + 5) / 60 * 0.28);
+    const variation=(Math.sin(x*.23+z*.17)+Math.sin(z*.51-x*.31)+2)/4;
+    color.copy(TERRAIN_COLORS.drySoil).lerp(TERRAIN_COLORS.ochre,variation*.5);
+    color.lerp(stoneColor,(Math.sin(x*.42-z*.27)+1)*.1);
+    color.lerp(TERRAIN_COLORS.mutedGreen,(Math.sin(x*.14+z*.21)+1)*.14);
+    color.lerp(roadColor,1-smoothStep((distanceToRoad(x,z)-ROAD_HALF_WIDTH)/.95));
     color.lerp(TERRAIN_COLORS.ash, getBurnInfluence(x, z) * 0.7);
     colors[index * 3] = color.r;
     colors[index * 3 + 1] = color.g;

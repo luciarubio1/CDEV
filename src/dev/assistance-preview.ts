@@ -1,5 +1,6 @@
 /** Banco visual local, servido solo desde tests/assistance-preview.html. */
 import * as THREE from 'three';
+import { animateCharacters } from '../game/npc/character-model';
 import { PlayerHealth } from '../game/player/player-health';
 import { PostFireProgression } from '../game/narrative/post-fire-progression';
 import { AssistanceScene } from '../game/narrative/assistance-scene';
@@ -58,6 +59,7 @@ renderer.setAnimationLoop(() => {
   const delta = Math.min(clock.getDelta(), 0.1);
   if (!document.hidden && document.hasFocus()) scene.update(delta);
   status.textContent = `Salud: ${health.amount.toFixed(1)} / 100 · ${flow.currentStage}`;
+  animateCharacters(world,delta,camera.position,flow.careLocked);
   renderer.render(world, camera);
 });
 window.addEventListener('resize', () => {

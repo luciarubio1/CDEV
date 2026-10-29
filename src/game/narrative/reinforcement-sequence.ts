@@ -1,9 +1,10 @@
+import { NPC_MOVEMENT } from './npc-movement';
 /** Cronología pura: ver completa u omitir produce el mismo fotograma final. */
 export const REINFORCEMENT_TIMING = {
   duration: 15,
   truckStop: 7,
   crewExit: 8,
-  crewArrive: 14,
+  crewArrive: 8 + NPC_MOVEMENT.crewTravelSeconds,
 } as const;
 
 export interface ReinforcementFrame {

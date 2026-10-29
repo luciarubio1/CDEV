@@ -40,6 +40,10 @@ import {
   TERRAIN_MAP_HALF_SIZE,
 } from '../game/world/terrain';
 import { createSierraEnvironment } from '../game/world/environment';
+import { createSierraTree, styleSierraBush } from '../game/world/sierra-vegetation';
+import { LANDSCAPE_SETTINGS, TREE_PLACEMENTS, BUSH_PLACEMENTS, ROCK_PLACEMENTS } from '../game/world/landscape-config';
+import { LandscapeDecoration } from '../game/world/landscape-decoration';
+import { registerTruckCollision } from '../game/world/truck-model';
 import { BurnedGroundSystem } from '../game/world/burned-ground';
 import { VegetationStateSystem } from '../game/world/vegetation-state';
 import { WindSystem, WIND_BITACORA_ENTRY } from '../game/world/wind-system';
@@ -47,6 +51,9 @@ import { AmbientAsh } from '../game/world/ambient-ash';
 import { AmbientWildlife } from '../game/world/ambient-wildlife';
 import { MainMenu } from '../ui/menus/main-menu';
 import { Bitacora } from '../ui/bitacora';
+import { InvestigationTour } from '../game/narrative/investigation-tour';
+import { configureAwarenessEnding } from '../ui/ending-panel';
+import { animateCharacters } from '../game/npc/character-model';
 import { ObjectiveCompass } from '../ui/hud/objective-compass';
 import { GAME_BALANCE } from '../game/balance-config';
 import { ReinforcementSequence } from '../game/narrative/reinforcement-sequence';
@@ -84,18 +91,19 @@ const postFire = gameSession.postFire;
 let companionCollider: THREE.Vector3 | null = null;
 const interactionKeys = new Set<string>();
 let interventionSnapshot: GameStatsSnapshot | null = null;
+let investigationDialogueOpen = false;
 let windowFocused = true;
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0xb5a58d);
-scene.fog = new THREE.Fog(0xb5a58d, 42, 100);
+scene.background = new THREE.Color(LANDSCAPE_SETTINGS.sky);
+scene.fog = new THREE.Fog(LANDSCAPE_SETTINGS.sky,LANDSCAPE_SETTINGS.fogNear,LANDSCAPE_SETTINGS.fogFar);
 
 const PLAYER_INITIAL_POSITION = new THREE.Vector3(0, getTerrainHeight(0, 7) + 1.7, 7);
 const camera = new THREE.PerspectiveCamera(
   60,
   window.innerWidth / window.innerHeight,
   0.1,
-  100,
+  LANDSCAPE_SETTINGS.cameraFar,
 );
 camera.position.copy(PLAYER_INITIAL_POSITION);
 
@@ -254,29 +262,12 @@ defeatOverlay.innerHTML = `
     <h1 id="defeat-title"></h1>
     <p class="defeat-reflection"></p>
     <p class="impact-message">Incluso cuando las llamas se apagan, el impacto sobre el suelo y la vegetación permanece.</p>
+    <ul class="awareness-ideas" hidden></ul>
     <p class="real-emergency-message">${REAL_EMERGENCY_NOTICE}</p>
-    <section class="defeat-summary" aria-labelledby="defeat-summary-title">
-      <h2 id="defeat-summary-title">Resumen de la intervención</h2>
-      <dl>
-        <div><dt>Tiempo de supervivencia</dt><dd data-result-stat="survival"></dd></div>
-        <div><dt>Tiempo de exploración posterior</dt><dd data-result-stat="exploration"></dd></div>
-        <div><dt>Focos apagados</dt><dd data-result-stat="fires"></dd></div>
-        <div><dt>Máximo de focos activos</dt><dd data-result-stat="active-fires"></dd></div>
-        <div><dt>Oleadas iniciadas</dt><dd data-result-stat="waves"></dd></div>
-        <div><dt>Máximo riesgo de la casa</dt><dd data-result-stat="house-risk"></dd></div>
-        <div><dt>Agua utilizada</dt><dd data-result-stat="water"></dd></div>
-        <div><dt>Vegetación quemada</dt><dd data-result-stat="burned-vegetation"></dd></div>
-        <div><dt>Superficie afectada</dt><dd data-result-stat="affected-surface"></dd></div>
-        <div><dt>Ruta elegida</dt><dd data-result-stat="route"></dd></div>
-        <div><dt>Hallazgos opcionales</dt><dd data-result-stat="discoveries"></dd></div>
-        <div><dt>Estaciones educativas visitadas</dt><dd data-result-stat="epilogue-stations"></dd></div>
-        <div><dt>Viento predominante</dt><dd data-result-stat="wind"></dd></div>
-        <div><dt>Cambios de viento</dt><dd data-result-stat="wind-changes"></dd></div>
-      </dl>
-    </section>
     <div class="defeat-actions">
       <button class="defeat-actions__retry" type="button">Reintentar</button>
       <button class="defeat-actions__menu" type="button">Volver al menú</button>
+      <button class="ending-credits" type="button" hidden>Créditos</button>
     </div>
   </div>
 `;
@@ -288,6 +279,13 @@ const retryButton = defeatOverlay.querySelector<HTMLButtonElement>('.defeat-acti
 const returnToMenuButton = defeatOverlay.querySelector<HTMLButtonElement>('.defeat-actions__menu');
 retryButton?.addEventListener('click', () => window.location.reload());
 returnToMenuButton?.addEventListener('click', () => window.location.reload());
+defeatOverlay.querySelector('.ending-credits')?.addEventListener('click', () => {
+  defeatOverlay.classList.remove('visible');
+  mainMenu.showCredits(() => {
+    defeatOverlay.classList.add('visible');
+    defeatOverlay.querySelector<HTMLButtonElement>('.ending-credits')?.focus();
+  });
+});
 
 const gameMenuButton = document.createElement('button');
 gameMenuButton.type = 'button';
@@ -355,14 +353,14 @@ controls.addEventListener('unlock', () => {
     !gameMenuOpen &&
     !gameSession.isOver &&
     !introDialogue.isOpen &&
-    !gameSession.isContainment && !companionDialogueOpen && !postFire.careLocked &&
+    !gameSession.isContainment && !companionDialogueOpen && !postFire.careLocked && !faunaTour.rescue.cameraLocked &&
     !educationalOverlayOpen
   ) {
     instructions.classList.remove('hidden');
   }
 });
 
-const ambientLight = new THREE.HemisphereLight(0xe2c9a5, 0x3b4237, 1.35);
+const ambientLight = new THREE.HemisphereLight(0xe2c9a5, 0x56605a, 1.5);
 scene.add(ambientLight);
 
 const directionalLight = new THREE.DirectionalLight(0xffe1b3, 2.65);
@@ -377,6 +375,8 @@ scene.add(directionalLight);
 
 scene.add(createTerrain());
 scene.add(createSierraEnvironment());
+const landscapeDecoration=new LandscapeDecoration(getTerrainHeight);
+scene.add(landscapeDecoration.object);
 const burnedGroundSystem = new BurnedGroundSystem(getTerrainHeight);
 const vegetationStateSystem = new VegetationStateSystem();
 const discoverableSystem = new DiscoverableSystem(getTerrainHeight);
@@ -399,6 +399,7 @@ const houseRisk = new HouseRisk();
 scene.add(house.object);
 const collisionSystem = new CollisionSystem();
 collisionSystem.addRectangle(housePosition, 5, 4);
+fireSystem.setVisualSurface({terrainHeight:getTerrainHeight,canBurnAt:(x,z,radius)=>collisionSystem.canOccupyXZ(x,z,radius)});
 
 const hoseView = new HoseView(camera, scene);
 const waterTank = new WaterTank();
@@ -435,6 +436,7 @@ const assistanceScene = new AssistanceScene(app, camera, playerHealth, postFire,
   },
 );
 const faunaTour = new FaunaTour(postFire, reinforcementView, collisionSystem, getTerrainHeight, (title, text) => {
+  cinematicOverlay.classList.remove('visible');
   faunaDialogueOpen = true;
   companionDialogueOpen = true;
   keys.clear();
@@ -450,14 +452,21 @@ const faunaTour = new FaunaTour(postFire, reinforcementView, collisionSystem, ge
   OTHER_FAUNA_NOTES.forEach((note) => bitacora.unlockEntry(note));
 } });
 scene.add(faunaTour.object);
-collisionSystem.addCircle(FIRE_TRUCK_POSITION, 2);
+function skipRescue(): void {
+  if (!faunaTour.rescue.cameraLocked) return;
+  keys.clear();
+  cinematicOverlay.classList.remove('visible');
+  faunaTour.rescue.skip();
+  companionCollider?.copy(reinforcementView.companionPosition);
+}
+registerTruckCollision(fireTruck,collisionSystem);
 const missionDirector = new MissionDirector(
   fireSystem,
   FIRE_TRUCK_POSITION,
   getTerrainHeight,
 );
 scene.add(missionDirector.object);
-const preparationSequence = new PreparationSequence();
+const preparationSequence = new PreparationSequence(fireTruck,collisionSystem);
 preparationSequence.setAvailable(false);
 scene.add(preparationSequence.object);
 scene.add(createGuideNpc());
@@ -505,7 +514,9 @@ function finishCinematic(): void {
 }
 
 cinematicSkipButton?.addEventListener('click', () => {
-  if (gameSession.isContainment) finishReinforcements();
+  if (faunaTour.rescue.cameraLocked) skipRescue();
+  else if (investigation.stage === 'closing') investigation.finish();
+  else if (gameSession.isContainment) finishReinforcements();
   else finishCinematic();
 });
 
@@ -513,7 +524,7 @@ function closeEducationalOverlay(): void {
   educationalOverlayOpen = false;
   keys.clear();
   clock.getDelta();
-  if (!gameSession.isOver && !gameMenuOpen) {
+  if (!gameSession.isOver && !gameMenuOpen && !investigation.cameraLocked && !faunaTour.rescue.cameraLocked) {
     controls.lock();
   }
 }
@@ -523,6 +534,45 @@ function isSimulationPaused(): boolean {
 }
 
 const bitacora = new Bitacora(app, closeEducationalOverlay);
+const investigation = new InvestigationTour(reinforcementView, camera, getTerrainHeight, bitacora,
+  (text) => {
+    investigationDialogueOpen = true;
+    companionDialogueOpen = true;
+    educationalOverlayOpen = false;
+    keys.clear();
+    controls.unlock();
+    guideDialogueOverlay.querySelector('strong')!.textContent = 'Compañero';
+    guideDialogueText!.textContent = text;
+    guideDialogueOverlay.classList.add('visible');
+    queueMicrotask(() => guideDialogueButton?.focus());
+  },
+  () => {
+    educationalOverlayOpen = true;
+    if (investigation.stage === 'closing') gameSession.beginClosing();
+    keys.clear();
+    controls.unlock();
+    instructions.classList.add('hidden');
+  },
+  () => { educationalOverlayOpen = false; keys.clear(); controls.lock(); },
+  finishExperience,
+);
+scene.add(investigation.view.object);
+
+function finishExperience(): void {
+  if (gameSession.isOver || !gameSession.isClosing || investigation.stage !== 'complete') return;
+  gameSession.win();
+  educationalOverlayOpen = false;
+  cinematicOverlay.classList.remove('visible');
+  keys.clear();
+  controls.unlock();
+  audioManager.stopAllLoops();
+  gameMenuButton.hidden = true;
+  configureAwarenessEnding(defeatOverlay);
+  defeatOverlay.classList.add('visible');
+  defeatOverlay.scrollTop = 0;
+  if (defeatMessage) defeatMessage.tabIndex = -1;
+  queueMicrotask(() => defeatMessage?.focus({ preventScroll: true }));
+}
 
 function openDiscoverable(item: DiscoverableDefinition): void {
   const discovered = discoverableSystem.discover(item.id);
@@ -535,7 +585,7 @@ function openDiscoverable(item: DiscoverableDefinition): void {
 }
 
 function openBitacora(): void {
-  if (gameSession.isOver || gameSession.isContainment || companionDialogueOpen || postFire.careLocked) return;
+  if (gameSession.isOver || gameSession.isContainment || companionDialogueOpen || postFire.careLocked || investigation.cameraLocked || faunaTour.rescue.cameraLocked) return;
   educationalOverlayOpen = true;
   keys.clear();
   hoseView.setWatering(false);
@@ -602,37 +652,23 @@ async function loadModel(
 
 async function loadEnvironment(): Promise<void> {
   const assets: Promise<unknown>[] = [];
-  const vegetation = [
-    [-15, -12], [-12, -14], [-9, -12], [-5, -15],
-    [2, -14], [6, -12], [13, -11], [16, -8],
-    [-17, -4], [-14, -6], [-11, -4], [-8, -7],
-    [14, -1], [17, 3], [15, 6], [-11, 9],
-  ];
+  const vegetation = TREE_PLACEMENTS;
 
   vegetation.forEach(([x, z], index) => {
     if (isReinforcementArea(x, z) || isFaunaArea(x, z)) return;
     const height = 5.5 + (index % 4) * 0.8;
     const position = new THREE.Vector3(x, getTerrainHeight(x, z), z);
-    assets.push(
-      loadModel(
-        'TreeHigh001.glb',
-        position,
-        height,
-        index * 0.73,
-      ).then((model) => vegetationStateSystem.register(model, position, 5)),
-    );
+    const tree=createSierraTree(height,index);tree.position.copy(position);tree.rotation.y=index*.73;
+    scene.add(tree);vegetationStateSystem.register(tree,position,5);
     fireSystem.trackCombustible({
       position,
       ignitionDistance: 5.5,
       ignitionTime: 10 + (index % 4) * 3,
     });
-    collisionSystem.addCircle(new THREE.Vector3(x, 0, z), 1.15);
+    collisionSystem.addCircle(new THREE.Vector3(x, 0, z), LANDSCAPE_SETTINGS.treeTrunkRadius);
   });
 
-  [
-    [-7, -3, 1.2], [3, -5, 0.9], [11, 2, 1.1],
-    [-4, 8, 1.3], [4, 9, 0.8], [14, -8, 1],
-  ].forEach(([x, z, scale], index) => {
+  ROCK_PLACEMENTS.forEach(([x, z, scale], index) => {
     if (isReinforcementArea(x, z) || isFaunaArea(x, z)) return;
     assets.push(
       loadModel(
@@ -645,18 +681,17 @@ async function loadEnvironment(): Promise<void> {
     collisionSystem.addCircle(new THREE.Vector3(x, 0, z), Number(scale) * 0.8);
   });
 
-  [
-    [-15, -9], [-11, -10], [-12, -1], [0, -9], [7, -11], [-15, 9], [1, 15], [12, 11],
-  ].forEach(([x, z], index) => {
+  BUSH_PLACEMENTS.forEach(([x, z], index) => {
     if (isReinforcementArea(x, z) || isFaunaArea(x, z)) return;
     const position = new THREE.Vector3(x, getTerrainHeight(x, z), z);
     assets.push(
       loadModel(
         'Bush001 (1).glb',
         position,
-        1.1 + (index % 3) * 0.2,
+        .8 + (index % 3) * .12,
         index * 0.8,
       ).then((model) => {
+        styleSierraBush(model,index,BUSH_COLLISION_RADIUS);
         vegetationStateSystem.register(model, position, 1.4);
         // El collider se registra con la posición final, ya apoyada en el terreno.
         collisionSystem.addCircle(model.position, BUSH_COLLISION_RADIUS);
@@ -927,48 +962,6 @@ function recordCurrentStats(): void {
   gameStats.recordWind(windSystem.state.name, windSystem.changeCount);
 }
 
-function formatSurvivalTime(totalSeconds: number): string {
-  const safeSeconds = Number.isFinite(totalSeconds)
-    ? Math.max(0, Math.round(totalSeconds))
-    : 0;
-  const minutes = Math.floor(safeSeconds / 60);
-  const seconds = safeSeconds % 60;
-
-  return minutes > 0
-    ? `${minutes} min ${seconds.toString().padStart(2, '0')} s`
-    : `${seconds} s`;
-}
-
-function setDefeatStat(name: string, value: string): void {
-  const stat = defeatOverlay.querySelector<HTMLElement>(
-    `[data-result-stat="${name}"]`,
-  );
-  if (stat) {
-    stat.textContent = value;
-  }
-}
-
-function updateDefeatSummary(snapshot: GameStatsSnapshot): void {
-  const safeRiskPercentage = Math.round(
-    Math.min(1, Math.max(0, snapshot.maxHouseRiskRatio)) * 100,
-  );
-
-  setDefeatStat('survival', formatSurvivalTime(snapshot.survivalSeconds));
-  setDefeatStat('exploration', formatSurvivalTime(snapshot.explorationSeconds));
-  setDefeatStat('fires', `${snapshot.firesExtinguished}`);
-  setDefeatStat('active-fires', `${snapshot.maxActiveFires}`);
-  setDefeatStat('waves', `${snapshot.wavesStarted}`);
-  setDefeatStat('house-risk', `${safeRiskPercentage}%`);
-  setDefeatStat('water', `${snapshot.waterUsed} unidades`);
-  setDefeatStat('burned-vegetation', `${snapshot.vegetationBurned}`);
-  setDefeatStat('discoveries', `${snapshot.discoveriesFound}/${discoverableSystem.totalCount}`);
-  setDefeatStat('epilogue-stations', `${snapshot.epilogueStationsFound}/${discoverableSystem.epilogueTotalCount}`);
-  setDefeatStat('wind', snapshot.predominantWind);
-  setDefeatStat('wind-changes', `${snapshot.windChanges}`);
-  setDefeatStat('route', snapshot.missionRoute);
-  setDefeatStat('affected-surface', `${snapshot.affectedSurfaceArea} m²`);
-}
-
 function endGame(reason: DefeatReason): void {
   if (gameSession.isOver || !gameSession.isMissionActive) {
     return;
@@ -1004,7 +997,6 @@ function endGame(reason: DefeatReason): void {
         'El daño acumulado sobre la vegetación muestra por qué proteger el bosque nativo importa para la flora, la fauna y la recuperación del suelo.';
     }
   }
-  updateDefeatSummary(gameStats.snapshot());
   defeatOverlay.classList.add('visible');
   queueMicrotask(() => retryButton?.focus());
 }
@@ -1076,13 +1068,22 @@ function closeCompanionDialogue(): void {
     gameSession.beginEpilogue();
     reinforcementView.restorePlayer(camera);
   }
-  if (faunaDialogueOpen) {
+  if (investigationDialogueOpen) {
+    investigationDialogueOpen = false;
+    investigation.continueDialogue();
+  } else if (faunaDialogueOpen) {
     faunaDialogueOpen = false;
     faunaTour.continueDialogue();
   } else if (postFire.currentStage === 'fauna-briefed') {
     faunaTour.start();
   }
   if (companionDialogueOpen) return; // Puede abrirse el comentario siguiente al cerrar un diálogo de fauna.
+  if (faunaTour.rescue.cameraLocked) {
+    controls.unlock();
+    cinematicOverlay.classList.add('visible');
+    gameMenuButton.hidden = true;
+    return;
+  }
   gameMenuButton.hidden = false;
   controls.lock();
 }
@@ -1092,7 +1093,7 @@ function nearCompanion(): boolean {
 }
 
 function updateInteraction(nearFireTruck: boolean): void {
-  if (!controls.isLocked || gameMenuOpen || educationalOverlayOpen || companionDialogueOpen || gameSession.isContainment || gameSession.isOver) {
+  if (!controls.isLocked || gameMenuOpen || educationalOverlayOpen || companionDialogueOpen || gameSession.isContainment || faunaTour.rescue.cameraLocked || gameSession.isOver) {
     interaction.classList.add('hidden');
     return;
   }
@@ -1117,7 +1118,7 @@ function updateInteraction(nearFireTruck: boolean): void {
 
   if (gameSession.isEpilogue) {
     const discovery = discoverableSystem.getContext(camera.position);
-    interaction.textContent = faunaTour.interactionMessage(camera.position) ?? (postFire.currentStage === 'assistance' && nearMedic()
+    interaction.textContent = (investigation.active ? investigation.interactionMessage(camera.position) : postFire.currentStage === 'investigation-meeting' ? 'Presioná F para hablar con tu compañero' : faunaTour.interactionMessage(camera.position)) ?? (postFire.currentStage === 'assistance' && nearMedic()
       ? 'Presioná F para recibir asistencia'
       : nearCompanion() && !faunaTour.isActive
       ? 'Presioná F para hablar con tu compañero'
@@ -1156,6 +1157,16 @@ function nearMedic(): boolean {
 window.addEventListener('keydown', (event) => {
   const heldInteraction = interactionKeys.has(event.code);
   interactionKeys.add(event.code);
+  if (faunaTour.rescue.cameraLocked && !companionDialogueOpen) {
+    if (event.code === 'Space' && !event.repeat && !heldInteraction) { event.preventDefault(); skipRescue(); }
+    else if (event.code === 'KeyM' && !event.repeat) { event.preventDefault(); showAudioStatus(audioManager.toggleMuted()); }
+    return;
+  }
+  if (investigation.stage === 'closing') {
+    if (event.code === 'Space' && !event.repeat && !heldInteraction) { event.preventDefault(); investigation.finish(); }
+    else if (event.code === 'KeyM' && !event.repeat) { event.preventDefault(); showAudioStatus(audioManager.toggleMuted()); }
+    return;
+  }
   if (postFire.careLocked) {
     if (event.code === 'Enter') {
       event.preventDefault();
@@ -1197,8 +1208,8 @@ window.addEventListener('keydown', (event) => {
 
   if (educationalOverlayOpen) {
     if (event.code === 'Escape' || event.code === 'Enter') {
-      event.preventDefault();
-      bitacora.close();
+      if (bitacora.requiresAnswer) { if (event.repeat || heldInteraction || event.code === 'Escape') event.preventDefault(); }
+      else { event.preventDefault(); if (!event.repeat && !heldInteraction) bitacora.close(); }
     }
     return;
   }
@@ -1243,6 +1254,12 @@ window.addEventListener('keydown', (event) => {
   if (event.code === 'KeyF' && controls.isLocked) {
     if (gameSession.isEpilogue) {
       if (event.repeat || heldInteraction) return;
+      if (postFire.currentStage === 'investigation-meeting') {
+        if (investigation.interact(camera.position)) return;
+        const item = discoverableSystem.findNearby(camera.position);
+        if (item && !investigation.cameraLocked) openDiscoverable(item);
+        return;
+      }
       if (faunaTour.interact(camera.position)) {
         if (faunaTour.rescue.isPlayerCarrying) hoseView.setEquipped(false);
         return;
@@ -1323,7 +1340,7 @@ window.addEventListener('focus', () => { windowFocused = true; keys.clear(); clo
 document.addEventListener('visibilitychange', () => { keys.clear(); hoseView.setWatering(false); clock.getDelta(); });
 
 renderer.domElement.addEventListener('click', () => {
-  if (experienceSelected && !cinematicActive && !gameMenuOpen && !educationalOverlayOpen && !introDialogue.isOpen && !companionDialogueOpen && !postFire.careLocked && !gameSession.isContainment && !gameSession.isOver) {
+  if (experienceSelected && !cinematicActive && !gameMenuOpen && !educationalOverlayOpen && !introDialogue.isOpen && !companionDialogueOpen && !postFire.careLocked && !gameSession.isContainment && !faunaTour.rescue.cameraLocked && !gameSession.isOver) {
     controls.lock();
   }
 });
@@ -1341,7 +1358,7 @@ renderer.domElement.addEventListener(
 );
 
 function updateMovement(delta: number): void {
-  if (!controls.isLocked || gameMenuOpen || educationalOverlayOpen || gameSession.isOver) {
+  if (!controls.isLocked || gameMenuOpen || educationalOverlayOpen || faunaTour.rescue.cameraLocked || gameSession.isOver) {
     return;
   }
 
@@ -1381,6 +1398,24 @@ function animate(): void {
   requestAnimationFrame(animate);
 
   const delta = Math.min(clock.getDelta(), 0.1);
+  if (faunaTour.rescue.cameraLocked) {
+    gameMenuButton.hidden = true;
+    cinematicOverlay.classList.toggle('visible', !companionDialogueOpen);
+    cinematicText!.textContent = 'El equipo especializado lleva al zorro al puesto de fauna.';
+    if (windowFocused && !document.hidden && !gameMenuOpen && !companionDialogueOpen && !educationalOverlayOpen) {
+      faunaTour.update(delta, camera.position, false);
+      companionCollider?.copy(reinforcementView.companionPosition);
+    }
+  }
+  if ((gameSession.isEpilogue || gameSession.isClosing) && investigation.active && !gameSession.isOver) {
+    investigation.update(delta, camera.position, isSimulationPaused(), !windowFocused || document.hidden || gameMenuOpen || companionDialogueOpen);
+    companionCollider?.copy(reinforcementView.companionPosition);
+    if (investigation.stage === 'closing') {
+      gameMenuButton.hidden = true;
+      cinematicOverlay.classList.add('visible');
+      cinematicText!.textContent = 'El equipo continúa el cuidado de la zona y de quienes quedaron.';
+    }
+  }
   let extinguishing = false;
   let dangerLevel = 0;
 
@@ -1420,6 +1455,7 @@ function animate(): void {
         status.textContent =
           `Preparación: ${preparationSequence.currentTask?.label ?? 'completa'}`;
       } else {
+        gameStats.updateCombatTime(delta);
         fireSystem.setWaveSpawningEnabled(false);
         fireSystem.setPropagationEnabled(false);
         const wave = fireSystem.update(delta, {
@@ -1437,6 +1473,7 @@ function animate(): void {
           burnedGroundSystem.addExtinguishedFire(source);
         });
         vegetationStateSystem.update(delta, fireSystem.activePositions);
+        landscapeDecoration.updateBurning(fireSystem.activePositions);
         burnedGroundSystem.update(delta);
         recordCurrentStats();
         dangerLevel = playerHealth.updateFromFirePositions(
@@ -1536,10 +1573,10 @@ function animate(): void {
   if (gameSession.isEpilogue && !gameSession.isOver) burnedGroundSystem.update(delta);
   if (postFire.currentStage === 'care' && windowFocused && !document.hidden) assistanceScene.update(delta);
 
-  if (experienceStarted && !isSimulationPaused() && gameSession.isEpilogue) {
+  if (experienceStarted && !isSimulationPaused() && gameSession.isEpilogue && !faunaTour.rescue.cameraLocked) {
     updateMovement(delta);
     gameStats.updateExplorationTime(delta);
-    faunaTour.update(delta, camera.position, false);
+    if (!investigation.active) faunaTour.update(delta, camera.position, false);
     companionCollider?.copy(reinforcementView.companionPosition);
     recordCurrentStats();
   }
@@ -1589,6 +1626,8 @@ function animate(): void {
     !gameMenuOpen &&
     !cinematicActive &&
     !gameSession.isContainment &&
+    !gameSession.isClosing &&
+    !faunaTour.rescue.cameraLocked &&
     !companionDialogueOpen &&
     !postFire.careLocked &&
     !educationalOverlayOpen &&
@@ -1599,7 +1638,7 @@ function animate(): void {
     camera.position,
     navigationForward,
     gameSession.isEpilogue
-      ? faunaTour.isActive ? faunaTour.navigationTarget : {
+      ? investigation.active ? investigation.navigationTarget : faunaTour.isActive ? faunaTour.navigationTarget : {
         position: postFire.currentStage === 'assistance' ? assistanceView.medicPosition : reinforcementView.companionPosition,
         label: postFire.currentStage === 'assistance' ? 'Puesto de asistencia' : 'Compañero',
       }
@@ -1611,14 +1650,14 @@ function animate(): void {
   );
   windHud.textContent = `Viento: ${windSystem.state.arrow} ${windSystem.state.name} · ${windSystem.strengthLabel}`;
   discoveriesHud.textContent = gameSession.isEpilogue
-    ? `Comprender el incendio: ${discoverableSystem.epilogueFoundCount}/${discoverableSystem.epilogueTotalCount} · Q: guía · B: Bitácora`
-    : `Exploración opcional · Hallazgos: ${discoverableSystem.foundCount}/${discoverableSystem.totalCount - discoverableSystem.epilogueTotalCount} · B: Bitácora`;
+    ? `Investigación: ${investigation.progress.count}/3 · B: Bitácora`
+    : `Exploración opcional · Hallazgos: ${discoverableSystem.foundCount}/${discoverableSystem.totalCount} · B: Bitácora`;
   missionHud.classList.toggle('hidden', !missionDirector.isActive || gameSession.isContainment || companionDialogueOpen || postFire.careLocked);
   forestDamageHud.textContent = missionDirector.forestDamageText;
   forestDamageHud.classList.toggle('hidden', !missionDirector.forestDamageText);
   if (missionObjective) {
     missionObjective.textContent = gameSession.isEpilogue
-      ? postFire.objective
+      ? investigation.active ? investigation.objective : postFire.objective
       : missionDirector.routeLabel
       ? `${missionDirector.routeLabel} · ${missionDirector.objectiveText}`
       : missionDirector.objectiveText;
@@ -1636,15 +1675,16 @@ function animate(): void {
   }
   if (gameSession.isContainment) status.textContent = 'Unidad de apoyo ingresando por el camino. Te tenemos a la vista.';
   else if (gameSession.isEpilogue || gameSession.isCompanionDialogue) status.textContent =
-    faunaTour.isWaiting ? (faunaTour.rescue.isActive ? 'El veterinario te espera' : 'Tu compañero te espera') : postFire.objective;
+    investigation.active ? investigation.interactionMessage(camera.position) : faunaTour.isWaiting ? (faunaTour.rescue.isActive ? 'El veterinario te espera' : 'Tu compañero te espera') : postFire.objective;
   const postCombat = gameSession.interventionClosed;
   environmentPanel.hidden = postCombat;
   waterHud.hidden = postCombat;
   healthHud.hidden = postCombat && !postFire.careLocked;
   windHud.hidden = postCombat;
-  discoveriesHud.hidden = postCombat;
+  discoveriesHud.hidden = postCombat && (!investigation.active || investigation.stage === 'closing' || gameSession.isOver);
   preparationChecklist.classList.toggle('hidden', postCombat || preparationSequence.isComplete || !introDialogue.isComplete);
   if (postCombat) damageVignette.style.opacity = '0';
+  animateCharacters(scene, delta, camera.position, companionDialogueOpen || introDialogue.isOpen || postFire.careLocked);
   renderer.render(scene, camera);
 }
 

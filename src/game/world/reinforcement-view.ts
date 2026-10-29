@@ -11,6 +11,9 @@ export const REINFORCEMENT_LAYOUT = {
   companion: new THREE.Vector3(-12, 0, 11.2),
   playerReturn: new THREE.Vector3(-8.5, 0, 10),
   camera: new THREE.Vector3(-5, 0, 7),
+  companionDoor: new THREE.Vector3(-10.9, 0, 13),
+  sectorDoor: new THREE.Vector3(-11.6, 0, 15.9),
+  crewAroundTruck: new THREE.Vector3(-13.4, 0, 16),
 };
 
 /** Franja reservada también al cargar vegetación y rocas (incluye cámara y regreso). */
@@ -19,6 +22,7 @@ export function isReinforcementArea(x: number, z: number): boolean {
 }
 
 function smooth(value: number): number { return value * value * (3 - 2 * value); }
+function blendYaw(a: number, b: number, t: number): number { return a + Math.atan2(Math.sin(b - a), Math.cos(b - a)) * t; }
 
 export class ReinforcementView {
   readonly object = new THREE.Group();
@@ -27,9 +31,9 @@ export class ReinforcementView {
   readonly sectorCrew = createGuideNpc();
   readonly companionPosition = new THREE.Vector3();
   private readonly lights = new FireTruckEmergencyLights(this.truck);
-  private readonly firstDoor = new THREE.Vector3(-10.9, 0, 13);
-  private readonly secondDoor = new THREE.Vector3(-11.6, 0, 15.9);
-  private readonly crewAroundTruck = new THREE.Vector3(-13.4, 0, 16);
+  private readonly firstDoor = REINFORCEMENT_LAYOUT.companionDoor;
+  private readonly secondDoor = REINFORCEMENT_LAYOUT.sectorDoor;
+  private readonly crewAroundTruck = REINFORCEMENT_LAYOUT.crewAroundTruck;
   private readonly cameraTarget = new THREE.Vector3();
 
   constructor(private readonly terrainHeight: (x: number, z: number) => number) {
@@ -55,7 +59,10 @@ export class ReinforcementView {
     this.ground(this.companion.position);
     this.ground(this.sectorCrew.position);
     this.companion.rotation.y = Math.atan2(REINFORCEMENT_LAYOUT.playerReturn.x - this.companion.position.x, REINFORCEMENT_LAYOUT.playerReturn.z - this.companion.position.z);
-    this.sectorCrew.rotation.y = Math.PI;
+    const firstYaw = Math.atan2(this.crewAroundTruck.x - this.secondDoor.x, this.crewAroundTruck.z - this.secondDoor.z);
+    const secondYaw = Math.atan2(REINFORCEMENT_LAYOUT.sectorCrew.x - this.crewAroundTruck.x, REINFORCEMENT_LAYOUT.sectorCrew.z - this.crewAroundTruck.z);
+    const routeYaw = blendYaw(firstYaw, secondYaw, smooth(THREE.MathUtils.clamp((crewTravel - .2) / .2, 0, 1)));
+    this.sectorCrew.rotation.y = blendYaw(routeYaw, Math.PI, smooth(THREE.MathUtils.clamp((crewTravel - .85) / .15, 0, 1)));
     if (frame.complete) this.lights.setActive(false);
   }
 

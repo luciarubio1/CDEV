@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { CarrierCarryView } from '../player/carrier-carry-view';
 import { RESCUE_CONFIG } from '../narrative/wildlife-rescue-config';
-import { setCarrierDoor } from './animal-carrier';
+import { setCarrierDoor, CARRIER_CARRY_POSE } from './animal-carrier';
 import { WildlifeStation } from './wildlife-station';
 import type { FaunaAnimals } from './fauna-animals';
 import type { VeterinarianView } from './veterinarian-view';
@@ -68,12 +68,13 @@ export class WildlifeRescueView {
       }
     }
     if (progress > 0.8) {
-      this.carryTarget.set(0, 1.05, 0.85);
+      this.carryTarget.set(0, CARRIER_CARRY_POSE.height, CARRIER_CARRY_POSE.forward);
       veterinarian.updateWorldMatrix(true, false);
       veterinarian.localToWorld(this.carryTarget);
       veterinarian.getWorldQuaternion(this.carryRotation);
       this.carrier.position.lerpVectors(this.staging, this.carryTarget, smooth((progress - 0.8) / 0.2));
       this.carrier.quaternion.slerpQuaternions(this.neutralRotation, this.carryRotation, smooth((progress - 0.8) / 0.2));
+      this.vet.carryPose(true, this.carrier);
     }
   }
   finishLoading(): void {
@@ -81,9 +82,9 @@ export class WildlifeRescueView {
     setCarrierDoor(this.carrier, 0);
     this.vet.object.updateWorldMatrix(true, true);
     this.vet.object.attach(this.carrier);
-    this.carrier.position.set(0, 1.05, 0.85);
+    this.carrier.position.set(0, CARRIER_CARRY_POSE.height, CARRIER_CARRY_POSE.forward);
     this.carrier.rotation.set(0, 0, 0);
-    this.vet.carryPose(true);
+    this.vet.carryPose(true, this.carrier);
   }
   beginPlacement(): void {
     this.carrier.updateWorldMatrix(true, true);
@@ -97,7 +98,7 @@ export class WildlifeRescueView {
     this.carrier.position.lerpVectors(this.carrierStart, this.stationTarget, smooth(progress));
     this.carrier.position.y += Math.sin(progress * Math.PI) * 0.15;
     this.carrier.quaternion.slerpQuaternions(this.carrierRotation, this.neutralRotation, smooth(progress));
-    this.vet.carryPose(progress < 1);
+    this.vet.carryPose(progress < 1, this.carrier);
   }
   finishPlacement(): void {
     this.renderPlacement(1);

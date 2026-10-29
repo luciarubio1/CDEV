@@ -1,4 +1,5 @@
 export interface GameStatsSnapshot {
+  combatSeconds: number;
   survivalSeconds: number;
   explorationSeconds: number;
   firesExtinguished: number;
@@ -21,6 +22,8 @@ function nonNegativeFinite(value: number): number {
 }
 
 export class GameStats {
+  private combatSeconds = 0;
+  updateCombatTime(delta: number): void { this.combatSeconds += nonNegativeFinite(delta); }
   private survivalSeconds = 0;
   private explorationSeconds = 0;
   private firesExtinguished = 0;
@@ -93,6 +96,7 @@ export class GameStats {
 
   snapshot(): GameStatsSnapshot {
     return {
+      combatSeconds: Math.round(this.combatSeconds),
       survivalSeconds: Math.round(this.survivalSeconds),
       explorationSeconds: Math.round(this.explorationSeconds),
       firesExtinguished: this.firesExtinguished,

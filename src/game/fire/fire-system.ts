@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { FireSource, type FireSourceOptions } from './fire-source';
 import type { WindState } from '../world/wind-system';
 import { GAME_BALANCE } from '../balance-config';
+import type { FireVisualSurface } from './fire-visual-config';
 
 /** Balance de oleadas: modificar estos valores para cambiar el ritmo del juego. */
 export const FIRE_SPAWN_INTERVAL = GAME_BALANCE.fire.waveInterval;
@@ -62,9 +63,12 @@ export class FireSystem {
   private extinguishedSources = 0;
   private waveSpawningEnabled = false;
   private propagationEnabled = true;
+  private visualSurface:FireVisualSurface|undefined;
+  /** Sampling is visual only; logical source positions and hit testing never move. */
+  setVisualSurface(surface:FireVisualSurface):void { this.visualSurface=surface; }
 
   addSource(options: FireSourceOptions): FireSource {
-    const source = new FireSource(options);
+    const source = new FireSource({...options,surface:options.surface??this.visualSurface});
     this.sources.push(source);
     this.object.add(source.object);
     return source;
