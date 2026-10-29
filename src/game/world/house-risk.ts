@@ -1,8 +1,9 @@
 import * as THREE from 'three';
+import { GAME_BALANCE } from '../balance-config';
 
-export const HOUSE_FIRE_DANGER_RADIUS = 7;
-export const HOUSE_EXPOSURE_TO_IGNITE = 45;
-export const HOUSE_EXPOSURE_DECAY_PER_SECOND = 2;
+export const HOUSE_FIRE_DANGER_RADIUS = GAME_BALANCE.house.dangerRadius;
+export const HOUSE_EXPOSURE_TO_IGNITE = GAME_BALANCE.house.exposureToIgnite;
+export const HOUSE_EXPOSURE_DECAY_PER_SECOND = GAME_BALANCE.house.exposureDecayPerSecond;
 
 export class HouseRisk {
   private exposure = 0;

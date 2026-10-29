@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "test:v2": "node --test tests/v2-flow.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

@@ -1,8 +1,13 @@
 import type { DiscoverableDefinition } from '../game/narrative/discoverables';
 
-type BitacoraEntry = Pick<DiscoverableDefinition, 'title' | 'text'>;
+export type BitacoraEntry = Pick<DiscoverableDefinition, 'title' | 'text'> & {
+  id?: string;
+  optional?: boolean;
+  sources?: readonly { title: string; url: string }[];
+};
 
 export class Bitacora {
+  private readonly unlocked = new Map<string, BitacoraEntry>();
   private readonly detail = document.createElement('section');
   private readonly log = document.createElement('section');
   private readonly detailTitle: HTMLHeadingElement;
@@ -31,6 +36,10 @@ export class Bitacora {
   }
 
   get isOpen(): boolean { return this.detail.classList.contains('visible') || this.log.classList.contains('visible'); }
+  get unlockedEntries(): readonly BitacoraEntry[] { return [...this.unlocked.values()]; }
+  unlockEntry(item: BitacoraEntry & { id: string }): void {
+    if (!this.unlocked.has(item.id)) this.unlocked.set(item.id, item);
+  }
 
   showDiscoverable(item: DiscoverableDefinition): void {
     this.detailTitle.textContent = item.title;
@@ -41,20 +50,35 @@ export class Bitacora {
 
   showLog(items: readonly BitacoraEntry[]): void {
     this.logContent.replaceChildren();
-    if (items.length === 0) {
+    const entries = [...items, ...this.unlocked.values()];
+    if (entries.length === 0) {
       const empty = document.createElement('p');
       empty.textContent = 'Todavía no encontraste hallazgos. Explorá el entorno para descubrirlos.';
       this.logContent.append(empty);
     } else {
-      items.forEach((item) => {
+      const optional = document.createElement('details');
+      const summary = document.createElement('summary');
+      summary.textContent = 'Otros habitantes de Córdoba';
+      optional.append(summary);
+      entries.forEach((item) => {
         const article = document.createElement('article');
         const title = document.createElement('h3');
         const text = document.createElement('p');
         title.textContent = item.title;
         text.textContent = item.text;
         article.append(title, text);
-        this.logContent.append(article);
+        item.sources?.forEach((source) => {
+          const link = document.createElement('a');
+          link.href = source.url;
+          link.target = '_blank';
+          link.rel = 'noopener noreferrer';
+          link.textContent = source.title;
+          article.append(link);
+        });
+        if (item.optional) optional.append(article);
+        else this.logContent.append(article);
       });
+      if (entries.some((item) => item.optional)) this.logContent.append(optional);
     }
     this.log.classList.add('visible');
     queueMicrotask(() => this.log.querySelector<HTMLButtonElement>('button')?.focus());
