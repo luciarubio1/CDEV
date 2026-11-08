@@ -31,6 +31,8 @@ npm run build
 
 Abrir la dirección que indique Vite. Elegir **Iniciar experiencia** y hacer clic en la escena para capturar el mouse.
 
+Los modelos nuevos de zorro y conejo se cargan automáticamente como reemplazo visual de los animales durante el recorrido de fauna. La casa, los árboles, el terreno y el resto del escenario conservan sus modelos originales.
+
 ## Controles
 
 | Entrada | Acción |

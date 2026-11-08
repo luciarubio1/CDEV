@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { AudioManager } from '../audio/audio-manager';
+import { AudioManager, type NarrationName } from '../audio/audio-manager';
 import { FireSystem } from '../game/fire/fire-system';
 import { GameSession, type DefeatReason } from '../game/game-session';
 import { GameStats, type GameStatsSnapshot } from '../game/game-stats';
@@ -195,7 +195,7 @@ app.appendChild(windHud);
 const cinematicOverlay = document.createElement('section');
 cinematicOverlay.className = 'cinematic-overlay';
 cinematicOverlay.innerHTML = `
-  <p class="cinematic-overlay__text"></p>
+  <p class="cinematic-overlay__text" aria-live="polite"></p>
   <button type="button">Omitir <small>Espacio</small></button>
   <span>Presioná Espacio para omitir</span>
 `;
@@ -240,7 +240,7 @@ const guideDialogueOverlay = document.createElement('section');
 guideDialogueOverlay.className = 'guide-dialogue';
 guideDialogueOverlay.innerHTML = `
   <div class="guide-dialogue__card" role="dialog" aria-modal="true">
-    <strong>Guía de emergencia</strong>
+    <strong>Guía</strong>
     <p></p>
     <button type="button">Entendido</button>
   </div>
@@ -482,19 +482,19 @@ const cinematicShots: readonly CinematicShot[] = [
     start: 3.1, end: 6.2,
     position: new THREE.Vector3(-21, getTerrainHeight(-21, 19) + 4.4, 19),
     target: FIRE_TRUCK_POSITION.clone().add(new THREE.Vector3(0, 1.3, 0)),
-    text: 'La sequía dejó el paisaje al límite',
+    text: 'El paisaje está muy seco',
   },
   {
     start: 6.2, end: 9.3,
     position: new THREE.Vector3(1, getTerrainHeight(1, 3) + 6.2, 3),
     target: new THREE.Vector3(5.5, getTerrainHeight(5.5, 8), 8),
-    text: 'Un foco de incendio amenaza la zona',
+    text: 'El fuego se acerca',
   },
   {
     start: 9.3, end: 12.5,
     position: PLAYER_INITIAL_POSITION.clone(),
     target: GUIDE_NPC_POSITION.clone().add(new THREE.Vector3(0, 1.25, 0)),
-    text: 'Tu equipo debe proteger la vivienda hasta la llegada de refuerzos',
+    text: 'Vamos a proteger la casa',
   },
 ];
 const introCinematic = new IntroCinematic({
@@ -604,6 +604,11 @@ const assetUrls = import.meta.glob('../assets/*.glb', {
   import: 'default',
   query: '?url',
 }) as Record<string, string>;
+const faunaModelUrls = import.meta.glob('../assets/new-models/*.glb', {
+  eager: true,
+  import: 'default',
+  query: '?url',
+}) as Record<string, string>;
 
 function prepareModel(model: THREE.Object3D): void {
   model.traverse((child) => {
@@ -650,16 +655,47 @@ async function loadModel(
   return model;
 }
 
+async function loadFaunaModel(fileName: string): Promise<{ model: THREE.Group; animations: readonly THREE.AnimationClip[] }> {
+  const assetUrl = faunaModelUrls[`../assets/new-models/${fileName}`];
+  if (!assetUrl) throw new Error(`No se encontró el modelo de fauna: ${fileName}`);
+  const gltf = await loader.loadAsync(assetUrl);
+  prepareModel(gltf.scene);
+  return { model: gltf.scene, animations: gltf.animations };
+}
+
+async function loadStaticFaunaModel(fileName: string): Promise<THREE.Group> {
+  const assetUrl = assetUrls[`../assets/${fileName}`];
+  if (!assetUrl) throw new Error(`No se encontró el modelo de fauna: ${fileName}`);
+  const gltf = await loader.loadAsync(assetUrl);
+  prepareModel(gltf.scene);
+  return gltf.scene;
+}
+
+void Promise.all([
+  loadStaticFaunaModel('low_poly_fox_by_pixelmannen_animated.glb'),
+  loadFaunaModel('rabbit.glb'),
+])
+  .then(([fox, rabbit]) => {
+    faunaTour.animals.replaceFox(fox, []);
+    faunaTour.animals.replaceSmallAnimal(rabbit.model, rabbit.animations);
+  })
+  .catch((error: unknown) => {
+    console.error('No se pudieron cargar los modelos nuevos de fauna.', error);
+    status.textContent = 'No se pudieron cargar los modelos nuevos de fauna';
+  });
+
 async function loadEnvironment(): Promise<void> {
   const assets: Promise<unknown>[] = [];
   const vegetation = TREE_PLACEMENTS;
 
   vegetation.forEach(([x, z], index) => {
     if (isReinforcementArea(x, z) || isFaunaArea(x, z)) return;
-    const height = 5.5 + (index % 4) * 0.8;
     const position = new THREE.Vector3(x, getTerrainHeight(x, z), z);
-    const tree=createSierraTree(height,index);tree.position.copy(position);tree.rotation.y=index*.73;
-    scene.add(tree);vegetationStateSystem.register(tree,position,5);
+    const height = 5.5 + (index % 4) * 0.8;
+    const tree = createSierraTree(height, index);
+    tree.position.copy(position); tree.rotation.y = index * .73;
+    scene.add(tree);
+    vegetationStateSystem.register(tree, position, 5);
     fireSystem.trackCombustible({
       position,
       ignitionDistance: 5.5,
@@ -720,7 +756,7 @@ async function loadEnvironment(): Promise<void> {
       ? 'Hablá con la guía junto al camión'
       : preparationSequence.isComplete
       ? `Incendio activo · Focos: ${fireSystem.activeCount}`
-      : 'Preparación requerida · acercate al camión';
+      : 'Prepará el equipo junto al camión';
   } catch (error) {
     status.textContent = 'Error al cargar un modelo del escenario';
     console.error('No se pudo cargar el entorno 3D.', error);
@@ -783,6 +819,15 @@ let reloadedAt = Number.NEGATIVE_INFINITY;
 let equipmentReadyAt = Number.NEGATIVE_INFINITY;
 let audioStatusUntil = Number.NEGATIVE_INFINITY;
 let audioStatusMessage = '';
+let firstFireNarrationPlayed = false;
+const narrationSubtitles: Record<NarrationName, string> = {
+  'intro-01': 'El fuego avanza.',
+  'intro-02': 'Protejamos la casa y el bosque.',
+  'intro-03': 'Prepará el equipo.',
+  'mission-01': '¡Equipo listo!',
+  'mission-02': 'Apagá el fuego.',
+  'safety-01': 'En un incendio real: alejate y avisá.',
+};
 let damageVignetteOpacity = 0;
 let waveNoticeUntil = Number.NEGATIVE_INFINITY;
 let waveNoticeMessage = '';
@@ -848,6 +893,14 @@ function showGuideDialogue(): void {
     guideDialogueText.textContent = introDialogue.text;
   }
   guideDialogueOverlay.classList.add('visible');
+  if (!introDialogue.isComplete) {
+    audioManager.playNarrationSequence(
+      ['intro-01', 'intro-02', 'intro-03', 'safety-01'],
+      (name) => {
+        if (guideDialogueText) guideDialogueText.textContent = narrationSubtitles[name];
+      },
+    );
+  }
   controls.unlock();
 }
 
@@ -855,6 +908,7 @@ function closeGuideDialogue(): void {
   keys.clear();
   clock.getDelta();
   const firstConversation = !introDialogue.isComplete;
+  audioManager.stopNarration();
   introDialogue.close();
   guideDialogueOverlay.classList.remove('visible');
 
@@ -862,7 +916,7 @@ function closeGuideDialogue(): void {
     preparationSequence.setAvailable(true);
     preparationChecklist.classList.remove('hidden');
     explorationNoticeUntil = performance.now() + 6000;
-    status.textContent = 'Preparación requerida · acercate al camión';
+    status.textContent = 'Prepará el equipo junto al camión';
   }
 
   controls.lock();
@@ -909,6 +963,10 @@ function completePreparationTask(): void {
     hoseView.setEquipped(true);
     equipmentReadyAt = performance.now();
     missionDirector.startAfterPreparation();
+    audioManager.playNarrationSequence(
+      ['mission-01'],
+      (name) => { status.textContent = narrationSubtitles[name]; },
+    );
     gameStats.recordMissionRoute(missionDirector.routeLabel);
     truckEmergencyLights.triggerEmergencyFlash();
   } else {
@@ -1123,25 +1181,25 @@ function updateInteraction(nearFireTruck: boolean): void {
       : nearCompanion() && !faunaTour.isActive
       ? 'Presioná F para hablar con tu compañero'
       : discovery
-      ? (discovery.withinInteractionRadius ? 'Presioná F para investigar: ' : 'Hallazgo educativo: ') + discovery.definition.title
+      ? (discovery.withinInteractionRadius ? 'Presioná F para mirar: ' : 'Hallazgo educativo: ') + discovery.definition.title
       : postFire.objective);
     interaction.classList.remove('hidden');
     return;
   }
 
   if (missionDirector.isNearRadio(camera.position)) {
-    interaction.textContent = 'Presioná F para solicitar refuerzos';
+    interaction.textContent = 'Presioná F para pedir ayuda';
   } else if (discoverableSystem.getContext(camera.position)) {
     const discoverableContext = discoverableSystem.getContext(camera.position)!;
     interaction.textContent = discoverableContext.withinInteractionRadius
-      ? `Presioná F para investigar: ${discoverableContext.definition.title}`
+      ? `Presioná F para mirar: ${discoverableContext.definition.title}`
       : `Hallazgo educativo: ${discoverableContext.definition.title}`;
   } else if (nearFireTruck) {
     interaction.textContent = 'Presioná R para recargar agua';
   } else if (waterTank.isEmpty) {
     interaction.textContent = 'Sin agua · acercate al camión para recargar';
   } else if (fireSystem.activeCount > 0) {
-    interaction.textContent = 'Mantené E para usar la manguera';
+    interaction.textContent = 'Mantené E para apagar el fuego';
   } else {
     interaction.classList.add('hidden');
     return;
@@ -1180,6 +1238,10 @@ window.addEventListener('keydown', (event) => {
   if (!experienceSelected) {
     return;
   }
+
+  // Reintenta iniciar el audio dentro de la interacción del usuario si el
+  // navegador bloqueó la reproducción durante la transición inicial.
+  audioManager.start();
 
   if (gameMenuOpen) {
     return;
@@ -1294,6 +1356,7 @@ window.addEventListener('keydown', (event) => {
       !event.repeat &&
       missionDirector.requestReinforcements(camera.position)
     ) {
+      audioManager.playRadioBeep();
       gameStats.recordMissionRoute(missionDirector.routeLabel);
       truckEmergencyLights.triggerEmergencyFlash();
       return;
@@ -1517,6 +1580,16 @@ function animate(): void {
 
           const canSpray = usingHose && !waterTank.isEmpty;
           if (canSpray && nearestFire && aimedAtFire) {
+            if (
+              !firstFireNarrationPlayed &&
+              missionDirector.currentStage === 'access'
+            ) {
+              firstFireNarrationPlayed = true;
+              audioManager.playNarrationSequence(
+                ['mission-02'],
+                (name) => { status.textContent = narrationSubtitles[name]; },
+              );
+            }
             const impactTime = fireSystem.getRemainingImpactTime(camera.position, GAME_BALANCE.hose.interactionRadius, EXTINGUISH_RATE_PER_SECOND);
             const activeTime = waterTank.consume(Math.min(delta, impactTime));
             const waterHit = activeTime > 0
@@ -1648,18 +1721,16 @@ function animate(): void {
       : null,
     navigationVisible,
   );
-  windHud.textContent = `Viento: ${windSystem.state.arrow} ${windSystem.state.name} · ${windSystem.strengthLabel}`;
+  windHud.textContent = `Viento: ${windSystem.state.arrow} ${windSystem.state.name}`;
   discoveriesHud.textContent = gameSession.isEpilogue
     ? `Investigación: ${investigation.progress.count}/3 · B: Bitácora`
-    : `Exploración opcional · Hallazgos: ${discoverableSystem.foundCount}/${discoverableSystem.totalCount} · B: Bitácora`;
+    : `Hallazgos: ${discoverableSystem.foundCount}/${discoverableSystem.totalCount} · B: Bitácora`;
   missionHud.classList.toggle('hidden', !missionDirector.isActive || gameSession.isContainment || companionDialogueOpen || postFire.careLocked);
   forestDamageHud.textContent = missionDirector.forestDamageText;
   forestDamageHud.classList.toggle('hidden', !missionDirector.forestDamageText);
   if (missionObjective) {
     missionObjective.textContent = gameSession.isEpilogue
       ? investigation.active ? investigation.objective : postFire.objective
-      : missionDirector.routeLabel
-      ? `${missionDirector.routeLabel} · ${missionDirector.objectiveText}`
       : missionDirector.objectiveText;
   }
   if (performance.now() < audioStatusUntil) {

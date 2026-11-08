@@ -12,10 +12,13 @@ function ellipsoid(parent: THREE.Group, mat: THREE.Material, x: number, y: numbe
 
 export class FaunaAnimals {
   readonly object = new THREE.Group();
-  readonly smallAnimal = new THREE.Group();
-  readonly fox = new THREE.Group();
+  smallAnimal = new THREE.Group();
+  fox = new THREE.Group();
   private readonly foxBody: THREE.Mesh;
   private elapsed = 0;
+  private foxMixer: THREE.AnimationMixer | null = null;
+  private smallAnimalMixer: THREE.AnimationMixer | null = null;
+  private smallAnimalAction: THREE.AnimationAction | null = null;
   private readonly legs: THREE.Object3D[] = [];
   constructor(private readonly terrain: (x: number, z: number) => number) {
     const grey = material(0x867d68), cream = material(0xe4d3b2), dark = material(0x34302b);
@@ -79,7 +82,64 @@ export class FaunaAnimals {
   }
   update(delta: number): void {
     this.elapsed += delta;
+    this.foxMixer?.update(delta);
+    this.smallAnimalMixer?.update(delta);
     this.foxBody.scale.y = 0.22 * (1 + Math.sin(this.elapsed * 2.5) * 0.035);
+  }
+
+  replaceFox(model: THREE.Object3D, clips: readonly THREE.AnimationClip[]): void {
+    const bounds = new THREE.Box3().setFromObject(this.fox);
+    const size = bounds.getSize(new THREE.Vector3());
+    const modelBounds = new THREE.Box3().setFromObject(model);
+    const modelSize = modelBounds.getSize(new THREE.Vector3());
+    const scale = size.y / Math.max(modelSize.y, 0.001);
+    model.scale.setScalar(scale);
+    model.position.set(this.fox.position.x, this.fox.position.y - modelBounds.min.y * scale, this.fox.position.z);
+    model.rotation.y = this.fox.rotation.y;
+    model.name = 'zorro-modelo-nuevo';
+    model.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+      }
+    });
+    this.fox.visible = false;
+    this.object.add(model);
+    this.fox = model as THREE.Group;
+    if (clips.length > 0) {
+      this.foxMixer = new THREE.AnimationMixer(model);
+      this.foxMixer.clipAction(clips[0]).play();
+    }
+  }
+
+  replaceSmallAnimal(model: THREE.Object3D, clips: readonly THREE.AnimationClip[], clipName = 'Run'): void {
+    const bounds = new THREE.Box3().setFromObject(this.smallAnimal);
+    const size = bounds.getSize(new THREE.Vector3());
+    const modelBounds = new THREE.Box3().setFromObject(model);
+    const modelSize = modelBounds.getSize(new THREE.Vector3());
+    const scale = size.y / Math.max(modelSize.y, 0.001);
+    model.scale.setScalar(scale);
+    model.position.set(this.smallAnimal.position.x, this.smallAnimal.position.y - modelBounds.min.y * scale, this.smallAnimal.position.z);
+    model.name = 'conejo-modelo-nuevo';
+    model.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+      }
+    });
+    this.smallAnimal.visible = false;
+    this.object.add(model);
+    this.smallAnimal = model as THREE.Group;
+    const clip = clips.find((candidate) => candidate.name.endsWith(`|${clipName}`)) ?? clips[0];
+    if (clip) {
+      this.smallAnimalMixer = new THREE.AnimationMixer(model);
+      this.smallAnimalAction = this.smallAnimalMixer.clipAction(clip);
+      this.smallAnimalAction.play();
+      this.smallAnimalAction.paused = true;
+    }
+  }
+  setSmallAnimalMoving(moving: boolean): void {
+    if (this.smallAnimalAction) this.smallAnimalAction.paused = !moving;
   }
   restFox(): void {
     this.foxBody.position.y = 0.30;
