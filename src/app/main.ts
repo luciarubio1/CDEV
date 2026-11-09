@@ -553,8 +553,9 @@ const investigation = new InvestigationTour(reinforcementView, camera, getTerrai
     controls.unlock();
     instructions.classList.add('hidden');
   },
-  () => { educationalOverlayOpen = false; keys.clear(); controls.lock(); },
+  (restoreLocked=true) => { educationalOverlayOpen = false; keys.clear(); if(restoreLocked)controls.lock();else controls.unlock(); },
   finishExperience,
+  () => controls.isLocked,
 );
 scene.add(investigation.view.object);
 

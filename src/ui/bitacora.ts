@@ -14,7 +14,6 @@ export class Bitacora {
   private readonly detailText: HTMLParagraphElement;
   private readonly logContent: HTMLDivElement;
   private readonly choices = document.createElement('div');
-  private readonly illustration = document.createElement('div');
   private pendingAnswer = false;
   private afterDetail: (() => void) | null = null;
 
@@ -35,21 +34,27 @@ export class Bitacora {
     this.detailTitle = this.detail.querySelector<HTMLHeadingElement>('h2')!;
     this.detailText = this.detail.querySelector<HTMLParagraphElement>('p')!;
     this.detailText.after(this.choices);
-    this.detailText.after(this.illustration);
-    this.illustration.className = 'inspection-cigarette';
-    this.illustration.textContent = 'Vista ampliada · colilla apagada';
-    this.illustration.hidden = true;
     this.logContent = this.log.querySelector<HTMLDivElement>('.bitacora__panel div')!;
     this.detail.querySelector('button')?.addEventListener('click', () => this.close());
     this.log.querySelector('button')?.addEventListener('click', () => this.close());
+    for(const root of [this.detail,this.log]) root.addEventListener('keydown',(event)=>{
+      if((event.code==='Enter'||event.code==='Space')&&event.repeat)event.preventDefault();
+      if(event.code!=='Tab')return;
+      const items=Array.from(root.querySelectorAll<HTMLElement>('button:not([hidden]), a[href], summary')).filter((item)=>item.getClientRects().length>0);
+      if(!items.length)return;
+      const first=items[0],last=items[items.length-1];
+      if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}
+      else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}
+    });
   }
 
   get isOpen(): boolean { return this.detail.classList.contains('visible') || this.log.classList.contains('visible'); }
   get unlockedEntries(): readonly BitacoraEntry[] { return [...this.unlocked.values()]; }
   get requiresAnswer(): boolean { return this.pendingAnswer; }
-  showQuestion(item: BitacoraEntry, question: string, options: readonly string[], answer: (option: number) => string, done: () => void): void {
+  showQuestion(item: BitacoraEntry, question: string, options: readonly string[], answer: (option: number) => string, done: () => void, presentation:'center'|'inspection'='center'): void {
     this.detail.querySelector('strong')!.textContent = 'Compañero · observación';
-    this.illustration.hidden = item.id !== 'investigation-cigarette';
+    if(presentation==='inspection')this.detail.classList.add('discoverable-card--inspection');
+    else this.detail.classList.remove('discoverable-card--inspection');
     this.detailTitle.textContent = item.title;
     this.detailText.textContent = `${item.text}\n\n${question}`;
     this.pendingAnswer = true;
@@ -68,12 +73,17 @@ export class Bitacora {
         this.detailText.textContent = answer(index);
         this.choices.replaceChildren();
         next.hidden = false;
-        next.focus();
+        this.focusDetailHeading();
       });
       this.choices.append(button);
     });
     this.detail.classList.add('visible');
-    this.choices.querySelector<HTMLButtonElement>('button')?.focus();
+    this.focusDetailHeading();
+  }
+  private focusDetailHeading():void {
+    this.detailTitle.tabIndex=-1;
+    this.detail.querySelector<HTMLElement>('.discoverable-card__panel')!.scrollTop=0;
+    this.detailTitle.focus({preventScroll:true});
   }
   unlockEntry(item: BitacoraEntry & { id: string }): void {
     if (!this.unlocked.has(item.id)) this.unlocked.set(item.id, item);
@@ -81,7 +91,7 @@ export class Bitacora {
 
   showDiscoverable(item: DiscoverableDefinition): void {
     this.detail.querySelector('strong')!.textContent = 'Hallazgo educativo';
-    this.illustration.hidden = true;
+    this.detail.classList.remove('discoverable-card--inspection');
     this.detailTitle.textContent = item.title;
     this.detailText.textContent = item.text;
     this.detail.classList.add('visible');
@@ -127,6 +137,7 @@ export class Bitacora {
   close(): void {
     if (!this.isOpen || this.pendingAnswer) return;
     this.detail.classList.remove('visible');
+    this.detail.classList.remove('discoverable-card--inspection');
     this.log.classList.remove('visible');
     this.onClose();
     const done = this.afterDetail;

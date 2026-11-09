@@ -113,7 +113,8 @@ Verificación de esta pasada: pruebas de jerarquía/raíz estable, materiales/ge
 | Modelos procedurales | `world/fauna-animals.ts`, `veterinarian-view.ts`, `animal-carrier.ts`, `wildlife-station.ts`, `npc/guide-npc.ts` |
 | Textos y fuentes de fauna | `fauna-education.ts`: `RESCUE_TEXT`, `FOX_NOTE`, `OTHER_FAUNA_NOTES` |
 | Estaciones, preguntas y cierre | `investigation-data.ts`: `INVESTIGATION_STATIONS`, `INVESTIGATION_RETURN_ROUTE`, `INVESTIGATION_SETTINGS`, `INVESTIGATION_CLOSING_SHOTS` |
-| Geometrías de indicios | `world/investigation-view.ts`; ampliación de colilla en bitácora/estilos |
+| Geometrías de indicios | `world/investigation-models.ts`; composición y señales en `world/investigation-view.ts` |
+| Materiales, proporciones y encuadres | `world/investigation-style.ts`: `INVESTIGATION_STYLE`, `INSPECTION_FRAMES` |
 | Hallazgos opcionales | `discoverables.ts`: `DISCOVERABLES`; no habilitar los placeholders del epílogo antiguo |
 | Brújula, tarjetas y menú | `src/ui/hud/objective-compass.ts`, `bitacora.ts`, `menus/main-menu.ts` |
 | Panel final | `src/ui/ending-panel.ts`: contenido; `src/app/main.ts`: plantilla y `finishExperience`; `styles.css`: `.awareness-ending`, `.awareness-ideas` |
@@ -249,6 +250,31 @@ Prueba manual completa:
 9. Repetir con audio silenciado, alternar ventana/pestaña y cronometrar una partida para medir el nuevo ritmo.
 
 Bancos aislados en desarrollo: `/tests/assistance-preview.html` y `/tests/rescue-preview.html` (con `npm run dev`). Sirven para inspección, no reemplazan el flujo de producción.
+
+## Estaciones educativas: modelos e inspección
+
+Se conservan posiciones, rutas, preguntas, respuestas, bitácora y progresión. La observación mantiene los 1,5 segundos de `INVESTIGATION_SETTINGS.inspectionSeconds`; no se agregan esperas. No se modificó la implementación del fuego.
+
+- **Sequía:** hojas finas curvas en grupos irregulares, tonos pajizos, suelo visible, hojas caídas y grietas ramificadas. Se conserva la distinción entre condiciones de propagación y fuentes de ignición.
+- **Asado:** piedras variadas, parrilla metálica con marco, barras y apoyos, carbón, ceniza, madera parcialmente carbonizada, utensilio y recipiente. Todo está frío, sin luces, brasas activas ni daño. Sigue siendo un posible origen, sin confirmar una causa.
+- **Colilla:** filtro, papel, extremo consumido irregular y ceniza, con unos 4,7 cm de longitud y 8 mm de diámetro. La marca tiene contorno irregular y borde difuminado. No se amplía el modelo ni se dibuja una colilla sustituta en la tarjeta.
+
+`world/investigation-models.ts` construye geometría estática y reutiliza materiales/geometrías. Las hojas se agrupan en `InstancedMesh`; no se reconstruyen por frame. `inspectionGroundHeight` interpola los triángulos de la malla real para apoyar detalles milimétricos: revisar sus constantes de tamaño/segmentos si cambia la resolución del terreno. `investigation-view.ts` coloca los indicios y pequeños anillos desplazados fuera de la evidencia, que desaparecen al inspeccionar.
+
+`narrative/inspection-camera.ts` es el controlador común. Ajusta distancia según límites del objeto, FOV y espacio reservado a la tarjeta; limita la altura durante la transición y adapta el encuadre al redimensionar. Guarda/restaura posición, orientación, lente y visibilidad previa de hijos de cámara (manos, manguera y carga). El flujo captura/restaura el bloqueo previo de controles. La tarjeta existente de `ui/bitacora.ts` usa una presentación lateral o inferior definida en `app/styles.css`, con foco de teclado, Tab y protección contra Enter/Espacio repetidos. No hay otro sistema de fichas ni notas.
+
+Ajustes:
+
+- `INVESTIGATION_STYLE` en `world/investigation-style.ts`: cantidad/altura de hojas, tamaño del fogón, grosor del metal, medidas reales de colilla y paleta compartida.
+- `INSPECTION_FRAMES`, en el mismo archivo y en orden sequía/asado/colilla: `fov`, `direction`, `fitMargin`, `minDistance`, `near` y `groundClearance`. La colilla necesita un plano cercano pequeño; no aumentar su escala para acercarla.
+- `investigation-models.ts`: distribución y formas; `investigation-view.ts`: desplazamientos/radios de señales. No mover estaciones o rutas para cambiar únicamente la composición.
+- `inspection-camera.ts` y `.discoverable-card--inspection` en estilos: área libre y diseño adaptable; conservar sincronizado el umbral de relación de aspecto 1,15.
+
+Banco aislado con `npm run dev`: `/tests/investigation-preview.html`. Permite seleccionar estación, orbitar, inspeccionar con F o botón, responder con mouse/Tab/Enter, consultar bitácora con B y reiniciar. Usa modelos, terreno y controlador reales; no sustituye la prueba de misiones en producción.
+
+Validación: `npm run build`, las 54 pruebas de `npm run test:v2` y `git diff --check` pasaron. Las pruebas nuevas cubren modelos fríos, separación de señales, apoyo de colilla contra raycast, encuadres horizontales/verticales, redimensionado, cámara sobre terreno, restauración exacta de lente/pose/visibilidad y protección de respuestas/foco. La suite existente comprueba respuestas, notas, recorrido y reinicio. Son comprobaciones geométricas y de lógica, sin render WebGL.
+
+No hubo navegador conectado para revisión visual. Queda recorrer las tres estaciones e inspeccionarlas en ventana horizontal/vertical: siluetas, materiales, legibilidad, transparencias, parpadeos y objetos flotantes. En producción verificar entrada/salida desde distintas orientaciones, manos/manguera/carga ocultas y restauradas, ambas respuestas, bitácora, compañero y reinicio. La compilación no confirma la apariencia. El README permanece breve y sin cambios.
 
 ## Limitaciones conocidas
 
