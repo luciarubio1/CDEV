@@ -21,6 +21,10 @@ export class WildlifeRescueView {
   private readonly animalTarget = new THREE.Vector3();
   private readonly stationTarget = new THREE.Vector3();
   private readonly neutralRotation = new THREE.Quaternion();
+  private readonly foxBounds = new THREE.Box3();
+  private readonly foxSize = new THREE.Vector3();
+  private readonly foxCenter = new THREE.Vector3();
+  private readonly foxCorner = new THREE.Vector3();
 
   constructor(
     readonly carrier: THREE.Group,
@@ -64,6 +68,7 @@ export class WildlifeRescueView {
         this.carrier.updateWorldMatrix(true, true);
         this.carrier.attach(fox);
         fox.position.set(0.07, 0.1, 0);
+        this.fitFoxInsideCarrier(fox);
         this.animals.restFox();
       }
     }
@@ -105,5 +110,27 @@ export class WildlifeRescueView {
     this.station.socket.attach(this.carrier);
     this.carrier.position.set(0, 0, 0);
     this.carrier.rotation.set(0, 0, 0);
+  }
+
+  private fitFoxInsideCarrier(fox: THREE.Object3D): void {
+    this.carrier.updateWorldMatrix(true, true);
+    fox.updateWorldMatrix(true, true);
+    this.foxBounds.setFromObject(fox);
+    this.foxSize.copy(this.foxBounds.max).sub(this.foxBounds.min);
+    const scale = Math.min(
+      1,
+      1.1 / Math.max(this.foxSize.x, 0.001),
+      0.55 / Math.max(this.foxSize.y, 0.001),
+      0.5 / Math.max(this.foxSize.z, 0.001),
+    );
+    fox.children.forEach((child) => child.scale.multiplyScalar(scale));
+    fox.updateWorldMatrix(true, true);
+    this.foxBounds.setFromObject(fox);
+    this.foxCenter.copy(this.foxBounds.min).add(this.foxBounds.max).multiplyScalar(0.5);
+    this.foxCorner.copy(this.foxCenter);
+    this.carrier.worldToLocal(this.foxCorner);
+    fox.position.x += 0.0 - this.foxCorner.x;
+    fox.position.y += 0.4 - this.foxCorner.y;
+    fox.position.z += 0.0 - this.foxCorner.z;
   }
 }

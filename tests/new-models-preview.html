@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Primera Línea · modelos nuevos</title>
+  <style>
+    body { margin: 0; overflow: hidden; font: 15px system-ui, sans-serif; background: #b5a58d; }
+    canvas { display: block; }
+    aside { position: fixed; z-index: 1; top: 12px; left: 12px; width: min(360px, calc(100vw - 48px)); padding: 16px; border-radius: 8px; background: #17302eee; color: #f1eee0; }
+    button { margin: 3px; padding: 8px 10px; border: 0; border-radius: 4px; background: #d8dcbf; cursor: pointer; }
+    button.active { background: #ffcf68; }
+    p { line-height: 1.4; }
+    #model-status { color: #c9e8d0; }
+  </style>
+</head>
+<body>
+  <aside>
+    <strong>Modelos nuevos · banco visual</strong>
+    <p>Elegí un modelo. Arrastrá para orbitar y usá la rueda para acercarte.</p>
+    <div id="model-buttons"></div>
+    <p><button id="animation-toggle" type="button">Reproducir animación</button></p>
+    <p id="model-status">Cargando modelos...</p>
+  </aside>
+  <script type="module" src="/src/dev/new-models-preview.ts"></script>
+</body>
+</html>
