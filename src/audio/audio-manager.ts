@@ -1,9 +1,17 @@
 import ambienceWindUrl from './ambience-wind.mp3';
 import defeatUrl from './defeat.mp3';
 import fireLoopUrl from './fire-loop.mp3';
+import fireTruckUrl from './firetruck.mp3';
+import radioBeepUrl from './radio beep.mp3';
 import sirenUrl from './siren.mp3';
 import truckRefillUrl from './truck-refill.mp3';
 import waterSprayUrl from './water-spray.mp3';
+import introOneUrl from './intro_1.mp3';
+import introTwoUrl from './intro-2.mp3';
+import introThreeUrl from './intro-3.mp3';
+import missionOneUrl from './mission-01.mp3';
+import missionTwoUrl from './mission-02.mp3';
+import safetyOneUrl from './safety-01.mp3';
 
 export const AUDIO_VOLUMES = {
   ambience: 0.2,
@@ -13,12 +21,14 @@ export const AUDIO_VOLUMES = {
   truckRefill: 0.5,
   siren: 0.45,
   defeat: 0.6,
+  narration: 0.9,
 } as const;
 
 export const FIRE_AUDIO_FALLOFF_DISTANCE = 22;
 
 type LoopSoundName = 'ambience' | 'fire' | 'waterSpray' | 'siren';
-type OneShotSoundName = 'truckRefill' | 'defeat' | 'sirenCue';
+type OneShotSoundName = 'truckRefill' | 'defeat' | 'sirenCue' | 'radioBeep';
+export type NarrationName = 'intro-01' | 'intro-02' | 'intro-03' | 'mission-01' | 'mission-02' | 'safety-01';
 
 function createAudio(url: string, loop = false): HTMLAudioElement {
   const audio = new Audio(url);
@@ -33,17 +43,27 @@ export class AudioManager {
     ambience: createAudio(ambienceWindUrl, true),
     fire: createAudio(fireLoopUrl, true),
     waterSpray: createAudio(waterSprayUrl, true),
-    siren: createAudio(sirenUrl, true),
+    siren: createAudio(fireTruckUrl, true),
   };
   private readonly oneShots: Record<OneShotSoundName, HTMLAudioElement> = {
     truckRefill: createAudio(truckRefillUrl),
     defeat: createAudio(defeatUrl),
     sirenCue: createAudio(sirenUrl),
+    radioBeep: createAudio(radioBeepUrl),
   };
   private started = false;
   private muted = false;
   private fireTargetVolume = 0;
   private defeatPlayed = false;
+  private readonly narration: Record<NarrationName, HTMLAudioElement> = {
+    'intro-01': createAudio(introOneUrl),
+    'intro-02': createAudio(introTwoUrl),
+    'intro-03': createAudio(introThreeUrl),
+    'mission-01': createAudio(missionOneUrl),
+    'mission-02': createAudio(missionTwoUrl),
+    'safety-01': createAudio(safetyOneUrl),
+  };
+  private narrationSequenceToken = 0;
 
   constructor() {
     this.loops.ambience.volume = AUDIO_VOLUMES.ambience;
@@ -53,6 +73,8 @@ export class AudioManager {
     this.oneShots.truckRefill.volume = AUDIO_VOLUMES.truckRefill;
     this.oneShots.defeat.volume = AUDIO_VOLUMES.defeat;
     this.oneShots.sirenCue.volume = AUDIO_VOLUMES.siren;
+    this.oneShots.radioBeep.volume = AUDIO_VOLUMES.siren;
+    Object.values(this.narration).forEach((audio) => { audio.volume = AUDIO_VOLUMES.narration; });
   }
 
   get isMuted(): boolean {
@@ -71,6 +93,7 @@ export class AudioManager {
         audio.muted = this.muted;
       },
     );
+    Object.values(this.narration).forEach((audio) => { audio.muted = this.muted; });
     return this.muted;
   }
 
@@ -120,6 +143,10 @@ export class AudioManager {
     this.playOneShot('sirenCue');
   }
 
+  playRadioBeep(): void {
+    this.playOneShot('radioBeep');
+  }
+
   playDefeatOnce(): void {
     if (this.defeatPlayed) {
       return;
@@ -127,7 +154,50 @@ export class AudioManager {
 
     this.defeatPlayed = true;
     this.stopAllLoops();
+    this.stopNarration();
     this.playOneShot('defeat');
+  }
+
+  playNarration(name: NarrationName): void {
+    if (!this.started) return;
+    this.stopNarration();
+    const audio = this.narration[name];
+    audio.currentTime = 0;
+    void audio.play().catch(() => undefined);
+  }
+
+  playNarrationSequence(
+    names: readonly NarrationName[],
+    onStart?: (name: NarrationName) => void,
+  ): void {
+    if (!this.started || names.length === 0) return;
+    this.stopNarration();
+    const token = ++this.narrationSequenceToken;
+    let index = 0;
+    const playNext = (): void => {
+      if (token !== this.narrationSequenceToken || index >= names.length) return;
+      const audio = this.narration[names[index]];
+      const name = names[index];
+      index += 1;
+      onStart?.(name);
+      audio.currentTime = 0;
+      audio.onended = playNext;
+      audio.onerror = playNext;
+      void audio.play().catch(() => {
+        if (token === this.narrationSequenceToken) playNext();
+      });
+    };
+    playNext();
+  }
+
+  stopNarration(): void {
+    this.narrationSequenceToken += 1;
+    Object.values(this.narration).forEach((audio) => {
+      audio.onended = null;
+      audio.onerror = null;
+      audio.pause();
+      audio.currentTime = 0;
+    });
   }
 
   stopAllLoops(): void {

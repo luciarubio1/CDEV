@@ -5,10 +5,10 @@ export const FAUNA_SOURCES = {
   cordoba: 'https://www.argentina.gob.ar/parquesnacionales/centro/parque-nacional-quebrada-del-condorito/ficha-del-area-protegida',
 };
 export const RESCUE_TEXT = {
-  identification: 'Es un zorro gris pampeano, Lycalopex gymnocercus: un animal silvestre nativo presente en Córdoba. Necesita una evaluación después de la emergencia.',
-  departure: 'La evaluación y el traslado corresponden al equipo especializado. Acompañanos al puesto y dejá espacio para que podamos trabajar.',
-  arrival: 'Conservar el hábitat también protege refugios y alimento para la fauna.\n\nQueda al cuidado del equipo para su evaluación. Ayudar también es avisar y dejar espacio para que trabajen los especialistas.',
-  companion: 'El equipo de fauna ya está trabajando. Ahora revisemos los indicios que encontraron junto al sendero.',
+  identification: 'Es un zorro nativo de Córdoba, llamado Lycalopex gymnocercus. Necesita que lo revise el equipo.',
+  departure: 'Acompañanos al puesto y dejá espacio para trabajar.',
+  arrival: 'Queda al cuidado del equipo. Ayudar es avisar y dejar espacio.',
+  companion: 'El equipo ya está trabajando. Ahora busquemos indicios.',
 };
 export const FOX_NOTE = {
   id: 'cordoba-fox',

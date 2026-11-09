@@ -79,15 +79,16 @@ export class FaunaTour {
       turnTowards(this.companion.companion, Math.atan2(this.walker.direction.x, this.walker.direction.z), delta);
       if (this.walker.finished && !this.waiting) {
         if (stage === 'fauna-walk-a') this.flow.advanceFauna('fauna-refuge');
-        else if (this.flow.advanceFauna('fauna-dialogue-b')) this.showDialogue('Compañero', 'Este necesita que lo revise el equipo de fauna. Avisemos al veterinario.');
+        else if (this.flow.advanceFauna('fauna-dialogue-b'))         this.showDialogue('Compañero', 'Este zorro necesita ayuda. Avisemos al equipo.');
       }
     } else if (stage === 'fauna-refuge') {
+      this.animals.setSmallAnimalMoving(true);
       this.refugeWalker.update(delta);
       this.animals.smallAnimal.position.copy(this.refugeWalker.position);
       this.animals.smallAnimal.rotation.y = -Math.atan2(this.refugeWalker.direction.z, this.refugeWalker.direction.x);
       if (this.refugeWalker.finished && this.flow.advanceFauna('fauna-dialogue-a')) {
         this.animals.smallAnimal.visible = false;
-        this.showDialogue('Compañero', 'Este pudo llegar a una zona de refugio. Sigamos revisando.');
+        this.showDialogue('Compañero', 'Este encontró un lugar seguro. Sigamos.');
       }
     } else if (stage === 'vet-arriving') {
       this.veterinarian.arrive(delta);
@@ -97,7 +98,7 @@ export class FaunaTour {
       this.evaluationElapsed += delta;
       this.veterinarian.evaluate(this.evaluationElapsed / FAUNA_CONFIG.evaluationSeconds);
       if (this.evaluationElapsed >= FAUNA_CONFIG.evaluationSeconds && this.flow.advanceFauna('vet-dialogue')) {
-        this.showDialogue('Veterinario', 'Gracias por avisar. Yo me encargo de revisarlo. Necesitamos el transportín que quedó junto al vehículo.');
+        this.showDialogue('Veterinario', 'Gracias por avisar. Traé el transportín y yo lo reviso.');
       }
     }
   }
@@ -119,7 +120,7 @@ export class FaunaTour {
     this.reported = true;
     this.veterinarian.object.visible = true;
     this.vetCollider = this.collisions.addCircle(this.veterinarian.object.position, 0.4);
-    this.showDialogue('Radio', 'Equipo de fauna: encontramos un zorro que necesita evaluación junto al sendero. Aviso recibido; el veterinario sale del puesto.');
+    this.showDialogue('Radio', 'Encontramos un zorro que necesita ayuda. El equipo ya viene.');
     return true;
   }
   interactionMessage(player: THREE.Vector3): string | null {

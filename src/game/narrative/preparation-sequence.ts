@@ -18,19 +18,19 @@ export interface PreparationTask {
 export const PREPARATION_TASKS: readonly PreparationTask[] = [
   {
     id: 'suit',
-    label: 'Equiparse el traje',
-    prompt: 'Presioná F para colocarte el traje',
+    label: 'Ponerte el traje',
+    prompt: 'Presioná F para ponerte el traje',
     position: FIRE_TRUCK_POSITION.clone().add(new THREE.Vector3(-2.5, 0, 0)),
   },
   {
     id: 'hose',
-    label: 'Retirar la manguera',
+    label: 'Tomar la manguera',
     prompt: 'Presioná F para retirar la manguera',
     position: FIRE_TRUCK_POSITION.clone().add(new THREE.Vector3(0, 0, 3.2)),
   },
   {
     id: 'connection',
-    label: 'Conectar la manguera al camión',
+    label: 'Conectar la manguera',
     prompt: 'Presioná F para conectar la manguera',
     position: FIRE_TRUCK_POSITION.clone().add(new THREE.Vector3(2.5, 0, 0)),
   },

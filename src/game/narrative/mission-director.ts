@@ -70,12 +70,12 @@ export class MissionDirector {
   get currentStage(): MissionStage { return this.stage; }
   get objectiveText(): string {
     switch (this.stage) {
-      case 'access': return 'Contené el foco de acceso';
-      case 'radio': return 'Solicitá refuerzos por radio junto al camión';
-      case 'house': return 'Contené el foco de la vivienda';
-      case 'forest': return 'Contené el sector del bosque';
-      case 'complete': return 'Intervención completada · unidad de apoyo en camino';
-      default: return 'Preparate junto al camión';
+      case 'access': return 'Apagá el fuego del camino';
+      case 'radio': return 'Pedí ayuda por radio';
+      case 'house': return 'Protegé la casa';
+      case 'forest': return 'Protegé el bosque';
+      case 'complete': return '¡Fuego controlado!';
+      default: return 'Prepará el equipo';
     }
   }
   get isActive(): boolean { return this.stage !== 'idle'; }
@@ -84,20 +84,20 @@ export class MissionDirector {
   get forestDamageText(): string { return ''; }
 
   getNavigationTarget(playerPosition: THREE.Vector3, _housePosition: THREE.Vector3): MissionNavigationTarget | null {
-    if (this.stage === 'radio') return this.navigationTarget(this.radioPosition, 'Radio de refuerzos', 90);
+    if (this.stage === 'radio') return this.navigationTarget(this.radioPosition, 'Radio', 90);
     const source = this.stage === 'access' ? this.accessFire : this.criticalFires
       .filter((fire) => fire.isActive)
       .sort((a, b) => a.object.position.distanceToSquared(playerPosition) - b.object.position.distanceToSquared(playerPosition))[0];
     if (!source?.isActive) return null;
     return this.navigationTarget(source.object.position,
-      this.stage === 'access' ? 'Foco de acceso' : this.stage === 'house' ? 'Foco de la vivienda' : 'Sector del bosque', 100);
+      this.stage === 'access' ? 'Fuego del camino' : this.stage === 'house' ? 'Fuego de la vivienda' : 'Fuego del bosque', 100);
   }
 
   startAfterPreparation(): void {
     if (this.stage !== 'idle') return;
     this.stage = 'access';
     this.accessFire = this.createMissionFire(ACCESS_FIRE_POSITION, 1);
-    this.announce('Contené el acceso; después solicitaremos apoyo por radio.');
+    this.announce('¡Camino protegido! Ahora pedí ayuda por radio.');
   }
   isNearRadio(position: THREE.Vector3): boolean {
     return this.stage === 'radio' && position.distanceTo(this.radioPosition) <= RADIO_INTERACTION_RADIUS;
@@ -106,7 +106,7 @@ export class MissionDirector {
     if (!this.isNearRadio(position)) return false;
     this.radio.visible = false;
     this.activateSector('house');
-    this.announce('Central recibió la alerta. Primero la vivienda; después el bosque.');
+    this.announce('¡Ayuda en camino! Protegé la casa y después el bosque.');
     return true;
   }
   update(delta: number, _context: FireUpdateContext, _houseRiskRatio: number): MissionUpdate {
@@ -114,12 +114,12 @@ export class MissionDirector {
     if (this.stage === 'access' && this.accessFire && !this.accessFire.isActive) {
       this.stage = 'radio';
       this.radio.visible = true;
-      this.announce('Acceso contenido. Solicitá refuerzos junto al camión.');
+      this.announce('¡Buen trabajo! Volvé al camión y pedí ayuda por radio.');
     } else if ((this.stage === 'house' || this.stage === 'forest') &&
       this.criticalFires.length > 0 && this.criticalFires.every((source) => !source.isActive)) {
       if (this.stage === 'house') {
         this.activateSector('forest');
-        this.announce('Vivienda contenida. Ahora revisá los focos del bosque.');
+        this.announce('¡Casa protegida! Ahora cuidá el bosque.');
       } else {
         this.stage = 'complete';
         return { victory: true, failure: null };
