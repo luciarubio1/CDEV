@@ -741,6 +741,113 @@ test('créditos del cierre reutilizan el menú y vuelven al panel sin iniciar ot
 const { InvestigationTour } = await import('../src/game/narrative/investigation-tour.ts');
 const { InvestigationProgress, INVESTIGATION_STATIONS, INVESTIGATION_RETURN_ROUTE, INVESTIGATION_SETTINGS } = await import('../src/game/narrative/investigation-data.ts');
 const { DiscoverableSystem } = await import('../src/game/narrative/discoverables.ts');
+const { InvestigationView } = await import('../src/game/world/investigation-view.ts');
+const { InspectionCamera } = await import('../src/game/narrative/inspection-camera.ts');
+const { INSPECTION_FRAMES, INVESTIGATION_STYLE } = await import('../src/game/world/investigation-style.ts');
+const { inspectionGroundHeight } = await import('../src/game/world/investigation-models.ts');
+
+test('estaciones frías: hojas finas, grietas, materiales distintos e indicadores fuera de los indicios', () => {
+  const view=new InvestigationView(getTerrainHeight),other=new InvestigationView(getTerrainHeight);
+  assert.equal(view.subjects.length,3);assert.equal(view.object.visible,false);
+  const blades=view.subjects[0].getObjectByName('dry-leaf-clusters');
+  assert.equal(blades.isInstancedMesh,true);assert.equal(blades.count,INVESTIGATION_STYLE.drought.tufts*INVESTIGATION_STYLE.drought.bladesPerTuft);
+  assert.deepEqual(blades.instanceMatrix.array,other.subjects[0].getObjectByName('dry-leaf-clusters').instanceMatrix.array);
+  assert.ok(view.subjects[0].getObjectByName('dry-crack'));
+  const grill=view.subjects[1].getObjectByName('grill-bar'),stone=view.subjects[1].getObjectByName('hearth-stone');
+  assert.ok(grill.material.metalness>.5);assert.equal(stone.material.metalness,0);
+  assert.ok(view.subjects[1].getObjectByName('charred-wood'));assert.ok(view.subjects[1].getObjectByName('meal-container'));assert.ok(view.subjects[1].getObjectByName('cooking-utensil'));
+  view.object.updateMatrixWorld(true);
+  const markerBox=new THREE.Box3().setFromObject(view.markers[1]),grillBox=new THREE.Box3();
+  view.subjects[1].traverse((node)=>{if(node.name.startsWith('grill-'))grillBox.union(new THREE.Box3().setFromObject(node));});
+  assert.equal(markerBox.intersectsBox(grillBox),false);
+  const cigarette=view.subjects[2];
+  assert.equal(new THREE.Box3().setFromObject(view.markers[2]).intersectsBox(new THREE.Box3().setFromObject(cigarette)),false);
+  const size=new THREE.Box3().setFromObject(cigarette).getSize(new THREE.Vector3());assert.ok(size.length()<.08);
+  for(const name of ['cigarette-filter','cigarette-paper','cigarette-consumed-end','cigarette-ash'])assert.ok(cigarette.getObjectByName(name));
+  view.object.traverse((node)=>{
+    assert.equal(Boolean(node.isLight),false);
+    if(node.isMesh){assert.notEqual(node.geometry.type,'ConeGeometry');if(node.material.emissive)assert.equal(node.material.emissive.getHex(),0);}
+  });
+});
+
+test('apoyo milimétrico de colilla coincide con los triángulos reales del terreno', () => {
+  const terrainMesh=createTerrain();terrainMesh.updateMatrixWorld(true);
+  const point=INVESTIGATION_STATIONS[2].position,ray=new THREE.Raycaster(new THREE.Vector3(point.x,20,point.z),new THREE.Vector3(0,-1,0));
+  const hit=ray.intersectObject(terrainMesh)[0];assert.ok(hit);
+  assert.ok(Math.abs(hit.point.y-inspectionGroundHeight(getTerrainHeight,point.x,point.z))<1e-6);
+  const view=new InvestigationView(getTerrainHeight);view.object.updateMatrixWorld(true);
+  view.subjects[2].traverse((node)=>{
+    if(!node.isMesh)return;
+    const positions=node.geometry.attributes.position,vertex=new THREE.Vector3();let minGap=Infinity;
+    for(let i=0;i<positions.count;i++){
+      vertex.fromBufferAttribute(positions,i).applyMatrix4(node.matrixWorld);
+      const gap=vertex.y-inspectionGroundHeight(getTerrainHeight,vertex.x,vertex.z);minGap=Math.min(minGap,gap);
+      assert.ok(gap>-.002,`${node.name} bajo suelo: ${gap}`);
+    }
+    assert.ok(minGap<.012,`${node.name} flotante: ${minGap}`);
+  });
+});
+
+test('inspecciones ajustan el encuadre, evitan el suelo y restauran lente, pose y visibilidad exactas', () => {
+  for(const aspect of [16/9,.7])for(let index=0;index<3;index++) {
+    const view=new InvestigationView(getTerrainHeight),world=new THREE.Scene();world.add(view.object);view.object.visible=true;
+    const camera=new THREE.PerspectiveCamera(60,aspect,.1,150);world.add(camera);
+    const station=INVESTIGATION_STATIONS[index].position;
+    camera.position.set(station.x+.8,getTerrainHeight(station.x+.8,station.z+.8)+1.7,station.z+.8);camera.lookAt(station);
+    camera.zoom=1.05;camera.filmOffset=.2;
+    if(aspect>1)camera.setViewOffset(1600,900,10,5,1580,885);
+    camera.updateProjectionMatrix();
+    const visible=new THREE.Group(),hidden=new THREE.Group();hidden.visible=false;camera.add(visible,hidden);
+    const saved={position:camera.position.toArray(),rotation:camera.quaternion.toArray(),projection:camera.projectionMatrix.toArray(),near:camera.near,fov:camera.fov,zoom:camera.zoom,view:camera.view?{...camera.view}:null};
+    const subjectSize=new THREE.Box3().setFromObject(view.subjects[index]).getSize(new THREE.Vector3()).toArray();
+    const inspection=new InspectionCamera(camera,getTerrainHeight);inspection.begin(view.subjects[index],INSPECTION_FRAMES[index],INVESTIGATION_SETTINGS.inspectionSeconds);
+    assert.equal(visible.visible,false);assert.equal(hidden.visible,false);assert.equal(camera.parent,world);
+    for(let i=0;i<90;i++){
+      inspection.update(1/60);
+      assert.ok(camera.position.y>=getTerrainHeight(camera.position.x,camera.position.z)+INSPECTION_FRAMES[index].groundClearance-1e-7);
+    }
+    inspection.update(.01);camera.updateMatrixWorld(true);
+    const box=new THREE.Box3().setFromObject(view.subjects[index]);
+    for(const x of [box.min.x,box.max.x])for(const y of [box.min.y,box.max.y])for(const z of [box.min.z,box.max.z]){
+      const corner=new THREE.Vector3(x,y,z),depth=-corner.clone().applyMatrix4(camera.matrixWorldInverse).z,ndc=corner.project(camera);
+      assert.ok(depth>camera.near);
+      assert.ok(ndc.x>-1&&ndc.x<1&&ndc.y>-1&&ndc.y<1,`fuera de cuadro ${index}: ${ndc.toArray()}`);
+      if(aspect>1)assert.ok(ndc.x<.24,`tarjeta tapa ${index}: ${ndc.x}`);
+      else assert.ok(ndc.y>-.08,`tarjeta inferior tapa ${index}: ${ndc.y}`);
+    }
+    assert.deepEqual(new THREE.Box3().setFromObject(view.subjects[index]).getSize(new THREE.Vector3()).toArray(),subjectSize);
+    inspection.restore();inspection.restore();
+    assert.deepEqual(camera.position.toArray(),saved.position);assert.deepEqual(camera.quaternion.toArray(),saved.rotation);
+    assert.deepEqual(camera.projectionMatrix.toArray(),saved.projection);assert.equal(camera.near,saved.near);assert.equal(camera.fov,saved.fov);assert.equal(camera.zoom,saved.zoom);assert.deepEqual(camera.view,saved.view);
+    assert.equal(visible.visible,true);assert.equal(hidden.visible,false);assert.equal(inspection.active,false);
+  }
+});
+
+test('macroinspección adapta el área libre al cambiar a ventana vertical', () => {
+  const view=new InvestigationView(getTerrainHeight),camera=new THREE.PerspectiveCamera(60,16/9,.1,150),inspection=new InspectionCamera(camera,getTerrainHeight);
+  const station=INVESTIGATION_STATIONS[2].position;camera.position.set(station.x+1,getTerrainHeight(station.x+1,station.z)+1.7,station.z);
+  inspection.begin(view.subjects[2],INSPECTION_FRAMES[2],1.5);inspection.update(1.5);
+  camera.aspect=.7;inspection.maintain();camera.updateMatrixWorld(true);
+  const center=new THREE.Box3().setFromObject(view.subjects[2]).getCenter(new THREE.Vector3()).project(camera);assert.ok(center.y>.3,`centro vertical: ${center.y}`);
+  inspection.restore();assert.equal(camera.aspect,.7);
+});
+
+test('tarjeta de inspección reutilizada mantiene foco de teclado y no repite respuestas', () => {
+  const previous=globalThis.document;globalThis.document={createElement:(tag)=>new DialogElement(tag),activeElement:null};
+  try {
+    const log=new Bitacora(new DialogElement(),()=>{}),station=INVESTIGATION_STATIONS[2];let answers=0,finished=0;
+    log.showQuestion(station,station.question,station.options,()=>{answers++;return station.feedback;},()=>finished++,'inspection');
+    assert.equal(log.detail.classList.contains('discoverable-card--inspection'),true);
+    const first=log.choices.nodes[0],last=log.choices.nodes[1];
+    for(const element of [first,last]){element.getClientRects=()=>[{}];element.focus=()=>globalThis.document.activeElement=element;}
+    log.detail.querySelectorAll=()=>[first,last];globalThis.document.activeElement=last;
+    let prevented=0;log.detail.listeners.get('keydown')({code:'Tab',shiftKey:false,preventDefault:()=>prevented++});
+    assert.equal(globalThis.document.activeElement,first);assert.equal(prevented,1);
+    log.detail.listeners.get('keydown')({code:'Enter',repeat:true,preventDefault:()=>prevented++});assert.equal(prevented,2);
+    first.listeners.get('click')();first.listeners.get('click')();assert.equal(answers,1);
+    log.close();log.close();assert.equal(finished,1);assert.equal(log.detail.classList.contains('discoverable-card--inspection'),false);
+  } finally {globalThis.document=previous;}
+});
 
 test('investigación: las ocho combinaciones avanzan sin penalizar y conservan tres respuestas únicas', () => {
   for (let mask = 0; mask < 8; mask++) {

@@ -5,6 +5,8 @@ import type { Bitacora } from '../../ui/bitacora';
 import { InvestigationProgress, INVESTIGATION_SETTINGS as CONFIG, INVESTIGATION_STATIONS as STATIONS, INVESTIGATION_RETURN_ROUTE, INVESTIGATION_CLOSING_SHOTS } from './investigation-data';
 import { WaypointWalker } from './waypoint-walker';
 import { FollowDistanceGate, turnTowards } from './npc-movement';
+import { InspectionCamera } from './inspection-camera';
+import { INSPECTION_FRAMES } from '../world/investigation-style';
 
 export type InvestigationStage = 'inactive' | 'intro' | 'walking' | 'observing' | 'question' | 'conclusion' | 'return' | 'closing' | 'complete';
 export class InvestigationTour {
@@ -15,12 +17,13 @@ export class InvestigationTour {
   private elapsed = 0;
   private readonly savedPosition = new THREE.Vector3();
   private readonly savedRotation = new THREE.Quaternion();
-  private readonly targetRotation = new THREE.Quaternion();
+  readonly inspection:InspectionCamera;
   private readonly temporaryCamera = new THREE.PerspectiveCamera();
   private readonly target = new THREE.Vector3();
   private readonly shotPosition = new THREE.Vector3();
   isWaiting = false;
   private readonly following = new FollowDistanceGate();
+  private restoreLocked=true;
   constructor(
     private readonly companion: ReinforcementView,
     private readonly camera: THREE.Camera,
@@ -28,9 +31,10 @@ export class InvestigationTour {
     private readonly bitacora: Bitacora,
     private readonly dialogue: (text: string) => void,
     private readonly lock: () => void,
-    private readonly release: () => void,
+    private readonly release: (restoreLocked?:boolean) => void,
     private readonly completed: () => void,
-  ) { this.view = new InvestigationView(terrain); }
+    private readonly controlsLocked:()=>boolean=()=>true,
+  ) { this.view = new InvestigationView(terrain);this.inspection=new InspectionCamera(camera,terrain); }
   get active(): boolean { return this.stage !== 'inactive'; }
   get cameraLocked(): boolean { return ['observing', 'question', 'closing'].includes(this.stage); }
   get objective(): string {
@@ -61,14 +65,9 @@ export class InvestigationTour {
     }
     if (this.stage !== 'walking' || !this.walker?.finished || !this.near(player, STATIONS[this.progress.count].position)) return false;
     this.stage = 'observing';
-    this.elapsed = 0;
-    this.savedPosition.copy(this.camera.position);
-    this.savedRotation.copy(this.camera.quaternion);
-    this.temporaryCamera.position.copy(this.camera.position);
-    this.target.copy(STATIONS[this.progress.count].position);
-    this.target.y = this.terrain(this.target.x, this.target.z) + 0.08;
-    this.temporaryCamera.lookAt(this.target);
-    this.targetRotation.copy(this.temporaryCamera.quaternion);
+    this.restoreLocked=this.controlsLocked();
+    this.view.markers[this.progress.count].visible=false;
+    this.inspection.begin(this.view.subjects[this.progress.count],INSPECTION_FRAMES[this.progress.count],CONFIG.inspectionSeconds);
     this.lock();
     return true;
   }
@@ -87,12 +86,10 @@ export class InvestigationTour {
   update(delta: number, player: THREE.Vector3, paused: boolean, scenePaused: boolean): void {
     if (scenePaused) return;
     if (this.stage === 'observing') {
-      this.elapsed += delta;
-      const t = Math.min(1, this.elapsed / CONFIG.inspectionSeconds);
-      this.camera.quaternion.slerpQuaternions(this.savedRotation, this.targetRotation, t * t * (3 - 2 * t));
-      if (t === 1) this.ask();
+      if(this.inspection.update(delta))this.ask();
       return;
     }
+    if(this.stage==='question'){this.inspection.maintain();return;}
     if (this.stage === 'closing') {
       this.elapsed += delta;
       this.renderClosing();
@@ -127,13 +124,12 @@ export class InvestigationTour {
       this.view.markers[index].visible = false;
       return `${option === 0 ? 'Esa lectura distingue el indicio de una causa confirmada.' : 'Gracias por observar. Revisemos qué podemos afirmar.'}\n${station.feedback}`;
     }, () => {
-      this.camera.position.copy(this.savedPosition);
-      this.camera.quaternion.copy(this.savedRotation);
+      this.inspection.restore();
       if (this.progress.count === 3) {
         this.stage = 'conclusion';
         this.dialogue('Contener el fuego fue una parte. Cuidar a quienes quedaron y comprender lo ocurrido también forma parte de la respuesta.');
-      } else { this.walkToStation(); this.release(); }
-    });
+      } else { this.walkToStation(); this.release(this.restoreLocked); }
+    }, 'inspection');
   }
   private near(a: THREE.Vector3, b: THREE.Vector3, radius = CONFIG.interactionRadius): boolean { return Math.hypot(a.x - b.x, a.z - b.z) <= radius; }
   private renderClosing(): void {

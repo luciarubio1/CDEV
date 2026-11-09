@@ -1126,5 +1126,12 @@ canvas {
 @media (max-width: 520px) { .awareness-ideas li { grid-template-columns: 1fr; gap: .3rem; } }
 .discoverable-card__panel p { white-space: pre-line; }
 .discoverable-card__panel button { margin: .35rem; }
-.inspection-cigarette { padding: 1rem; border: 1px solid #7b8d81; border-radius: .75rem; color: #c8d6ce; text-align: center; font-size: .85rem; }
-.inspection-cigarette::before { content: ''; display: block; width: 110px; height: 22px; margin: .5rem auto 1rem; border-radius: 3px; transform: rotate(-12deg); background: linear-gradient(90deg, #c59650 0 58%, #e3dfcc 58% 90%, #59534b 90%); box-shadow: 0 3px 8px #0008; }
+.discoverable-card--inspection { justify-content: flex-end; padding: 12px; background: linear-gradient(to left, #07120c30, transparent 65%); }
+.discoverable-card--inspection .discoverable-card__panel { width: min(37vw, 430px); max-height: calc(100vh - 24px); padding: clamp(14px, 2vw, 24px); box-sizing: border-box; }
+.discoverable-card--inspection h2 { font-size: clamp(20px, 2.4vw, 28px); }
+.discoverable-card--inspection button { width: 100%; margin: 8px 0; text-align: left; }
+.discoverable-card--inspection p { line-height: 1.4; }
+@media (max-aspect-ratio: 23/20) {
+  .discoverable-card--inspection { align-items: flex-end; }
+  .discoverable-card--inspection .discoverable-card__panel { width: 100%; max-height: 43vh; }
+}
