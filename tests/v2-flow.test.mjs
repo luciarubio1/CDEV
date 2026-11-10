@@ -1163,6 +1163,18 @@ test('recorrido espera, retoma sin saltos y se pausa con los diálogos', () => {
   assert.equal(companion.companionPosition.y, terrain(companion.companionPosition.x, companion.companionPosition.z));
 });
 
+test('atajo de desarrollo de fauna conserva la radio como primera interacción del rescate', () => {
+  const { flow, companion, tour } = faunaFixture();
+  assert.equal(tour.skipTrailToFox(), true);
+  assert.equal(flow.currentStage, 'fauna-radio');
+  assert.equal(tour.animals.smallAnimal.visible, false);
+  assert.equal(tour.skipTrailToFox(), false);
+  assert.match(tour.interactionMessage(tour.animals.fox.position), /F para avisar/);
+  assert.equal(tour.interact(tour.animals.fox.position), true);
+  assert.equal(flow.currentStage, 'vet-arriving');
+  assert.ok(Math.hypot(companion.companionPosition.x - FAUNA_CONFIG.routeB.at(-1).x, companion.companionPosition.z - FAUNA_CONFIG.routeB.at(-1).z) < .001);
+});
+
 test('fauna, radio y veterinario ocurren una vez; brújula habilita la recogida del transportín', (t) => {
   const { session, flow, companion, tour, dialogues } = faunaFixture();
   let seconds = 0;

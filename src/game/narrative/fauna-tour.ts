@@ -62,6 +62,18 @@ export class FaunaTour {
     this.object.visible = this.animals.object.visible = true;
     this.walker = new WaypointWalker(FAUNA_CONFIG.routeA, FAUNA_CONFIG.companionSpeed, this.terrain);
   }
+  /** Atajo de desarrollo: conserva las mismas transiciones y deja la radio como próxima acción. */
+  skipTrailToFox(): boolean {
+    if (!this.started || this.flow.currentStage !== 'fauna-walk-a') return false;
+    this.walker = null;
+    this.waiting = false;
+    this.animals.setSmallAnimalMoving(false);
+    this.animals.smallAnimal.visible = false;
+    const transitions = ['fauna-refuge', 'fauna-dialogue-a', 'fauna-walk-b', 'fauna-dialogue-b', 'fauna-radio'] as const;
+    if (!transitions.every((next) => this.flow.advanceFauna(next))) return false;
+    this.companion.moveCompanion(FAUNA_CONFIG.routeB.at(-1)!);
+    return true;
+  }
   update(delta: number, player: THREE.Vector3, paused: boolean): void {
     if (!this.started || paused) return;
     this.animals.update(delta);

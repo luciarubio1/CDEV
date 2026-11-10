@@ -92,6 +92,8 @@ let companionCollider: THREE.Vector3 | null = null;
 const interactionKeys = new Set<string>();
 let interventionSnapshot: GameStatsSnapshot | null = null;
 let investigationDialogueOpen = false;
+const developerMode = import.meta.env.DEV && new URLSearchParams(window.location.search).get('dev') === '1';
+let developerPanel: { refresh: () => void } | null = null;
 let windowFocused = true;
 
 const scene = new THREE.Scene();
@@ -360,17 +362,24 @@ controls.addEventListener('unlock', () => {
   }
 });
 
-const ambientLight = new THREE.HemisphereLight(0xe2c9a5, 0x56605a, 1.5);
+const ambientLight = new THREE.HemisphereLight(
+  LANDSCAPE_SETTINGS.hemisphereSky,
+  LANDSCAPE_SETTINGS.hemisphereGround,
+  LANDSCAPE_SETTINGS.hemisphereIntensity,
+);
 scene.add(ambientLight);
 
-const directionalLight = new THREE.DirectionalLight(0xffe1b3, 2.65);
-directionalLight.position.set(-8, 14, 6);
+const directionalLight = new THREE.DirectionalLight(LANDSCAPE_SETTINGS.sun, LANDSCAPE_SETTINGS.sunIntensity);
+directionalLight.position.set(...LANDSCAPE_SETTINGS.sunPosition);
 directionalLight.castShadow = true;
-directionalLight.shadow.mapSize.set(1024, 1024);
-directionalLight.shadow.camera.left = -15;
-directionalLight.shadow.camera.right = 15;
-directionalLight.shadow.camera.top = 15;
-directionalLight.shadow.camera.bottom = -15;
+directionalLight.shadow.mapSize.set(2048, 2048);
+directionalLight.shadow.camera.left = -22;
+directionalLight.shadow.camera.right = 22;
+directionalLight.shadow.camera.top = 22;
+directionalLight.shadow.camera.bottom = -22;
+directionalLight.shadow.bias = -0.0002;
+directionalLight.shadow.normalBias = 0.025;
+directionalLight.shadow.radius = 1.5;
 scene.add(directionalLight);
 
 scene.add(createTerrain());
@@ -1081,6 +1090,87 @@ function startContainment(): void {
   reinforcementView.setCamera(camera);
 }
 
+function settleDeveloperFires(): void {
+  const context = { playerPosition: camera.position, fireTruckPosition: FIRE_TRUCK_POSITION, housePosition, wind: windSystem.state };
+  while (fireSystem.activeCount > 0) {
+    fireSystem.extinguishNearest(fireSystem.activePositions[0], Number.POSITIVE_INFINITY, Number.MAX_SAFE_INTEGER);
+  }
+  fireSystem.consumeExtinguishedSources().forEach((source) => burnedGroundSystem.addExtinguishedFire(source));
+  fireSystem.update(0, context);
+  vegetationStateSystem.update(0, fireSystem.activePositions);
+  landscapeDecoration.updateBurning(fireSystem.activePositions);
+  burnedGroundSystem.update(0);
+}
+
+function skipInitialCinematicForDeveloper(): boolean {
+  if (!developerMode || !experienceStarted || !cinematicActive) return false;
+  finishCinematic();
+  closeGuideDialogue();
+  return true;
+}
+
+function skipCombatForDeveloper(): boolean {
+  if (!developerMode || !gameSession.isMissionActive || !introDialogue.isComplete || preparationSequence.isComplete) return false;
+  while (!preparationSequence.isComplete) {
+    const task = preparationSequence.currentTask;
+    if (!task) return false;
+    camera.position.set(task.position.x, task.position.y + 1.7, task.position.z);
+    completePreparationTask();
+  }
+  const context = { playerPosition: camera.position, fireTruckPosition: FIRE_TRUCK_POSITION, housePosition, wind: windSystem.state };
+  settleDeveloperFires();
+  missionDirector.update(0, context, 0);
+  if (!missionDirector.requestReinforcements(missionDirector.radioPosition)) return false;
+  settleDeveloperFires();
+  missionDirector.update(0, context, 0);
+  settleDeveloperFires();
+  missionDirector.update(0, context, 0);
+  if (missionDirector.currentStage !== 'complete') return false;
+  startContainment();
+  return true;
+}
+
+function skipAssistanceForDeveloper(): boolean {
+  if (!developerMode || !gameSession.isCompanionDialogue || postFire.assistanceCompleted) return false;
+  closeCompanionDialogue();
+  if (postFire.currentStage !== 'companion' || !postFire.meetCompanion()) return false;
+  assistanceView.show(collisionSystem);
+  if (!postFire.requestAssistance()) return false;
+  assistanceScene.open();
+  assistanceScene.confirm();
+  assistanceScene.update(60);
+  assistanceScene.confirm();
+  return isDeveloperFaunaCompanionReady(postFire.currentStage);
+}
+
+function isDeveloperFaunaCompanionReady(stage: string): boolean { return stage === 'fauna-companion'; }
+
+function skipFaunaTrailForDeveloper(): boolean {
+  if (!developerMode || !gameSession.isEpilogue || postFire.currentStage !== 'fauna-companion') return false;
+  if (!postFire.meetForFauna()) return false;
+  faunaTour.start();
+  if (!faunaTour.skipTrailToFox()) return false;
+  const fox = faunaTour.animals.fox.position;
+  // Llegada opuesta al compañero: evita iniciar dentro de su collider y sigue
+  // quedando al alcance para avisar al equipo de fauna.
+  camera.position.set(fox.x + 1.8, getTerrainHeight(fox.x + 1.8, fox.z + 1.1) + 1.7, fox.z + 1.1);
+  camera.lookAt(fox.x, fox.y + 0.35, fox.z);
+  companionCollider?.copy(reinforcementView.companionPosition);
+  controls.lock();
+  return true;
+}
+
+if (developerMode) {
+  void import('../dev/developer-panel').then(({ DeveloperPanel }) => {
+    developerPanel = new DeveloperPanel(app, [
+      { label: 'Saltar cinemática inicial', enabled: () => experienceStarted && cinematicActive, run: skipInitialCinematicForDeveloper },
+      { label: 'Saltar preparación y combate', enabled: () => gameSession.isMissionActive && introDialogue.isComplete && !preparationSequence.isComplete, run: skipCombatForDeveloper },
+      { label: 'Saltar asistencia médica', enabled: () => gameSession.isCompanionDialogue && !postFire.assistanceCompleted, run: skipAssistanceForDeveloper },
+      { label: 'Saltar recorrido de fauna', enabled: () => gameSession.isEpilogue && postFire.currentStage === 'fauna-companion', run: skipFaunaTrailForDeveloper },
+    ]);
+  });
+}
+
 function finishReinforcements(): void {
   if (!gameSession.isContainment) return;
   // Único finalizador tanto para el avance natural como para Espacio/botón.
@@ -1462,6 +1552,7 @@ function animate(): void {
   requestAnimationFrame(animate);
 
   const delta = Math.min(clock.getDelta(), 0.1);
+  developerPanel?.refresh();
   if (faunaTour.rescue.cameraLocked) {
     gameMenuButton.hidden = true;
     cinematicOverlay.classList.toggle('visible', !companionDialogueOpen);
