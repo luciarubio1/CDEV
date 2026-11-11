@@ -1,10 +1,10 @@
 # Primera Línea
 
-Experiencia narrativa en primera persona sobre incendios forestales en las Sierras de Córdoba, creada para una demostración académica.
+Experiencia narrativa en primera persona sobre incendios forestales en las Sierras de Córdoba, creada para una demostración académica y pensada para chicos y chicas de 11 a 12 años, en el último ciclo de primaria.
 
 ## Propósito educativo
 
-Invita a comprender la prevención, el impacto sobre comunidades y hábitats, y el cuidado de fauna a cargo de especialistas. Distingue condiciones de propagación de posibles fuentes de ignición, sin atribuir una causa definitiva al incendio representado. No constituye entrenamiento de respuesta a emergencias.
+Invita a comprender la prevención, el impacto sobre comunidades y hábitats, y el cuidado de la fauna con ayuda de especialistas. Introduce conceptos como propagación, fuente de ignición e indicio, sin afirmar una causa definitiva para el incendio representado. No constituye entrenamiento de respuesta a emergencias.
 
 ## Recorrido
 

@@ -147,7 +147,9 @@ test('humo y chispas responden al viento; la misión conserva sus referencias si
   assert.equal(director.accessFire,fire.sources[0]);
   assert.ok(director.getNavigationTarget(context.playerPosition,context.housePosition).position.distanceTo(fire.sources[0].object.position)<1e-8);
   const result=fire.extinguishNearest(fire.sources[0].object.position,1,100);assert.equal(result.extinguished,true);
-  director.update(.1,context,0);assert.equal(director.currentStage,'radio');
+  fire.update(.1, context); director.update(.1,context,0);assert.equal(director.currentStage,'access');
+  fire.update(1.1, context); director.update(1.1,context,0);
+  fire.update(0.4, context); director.update(0.4,context,0);assert.equal(director.currentStage,'radio');
   assert.equal(director.requestReinforcements(director.radioPosition),true);assert.equal(director.currentStage,'house');assert.equal(director.criticalFires[0],fire.sources[1]);
 });
 
@@ -160,7 +162,11 @@ test('los focos reales de misión mantienen todas sus llamas junto a los obstác
   const fire=new FireSystem();fire.setPropagationEnabled(false);fire.setVisualSurface({terrainHeight:getTerrainHeight,canBurnAt:(x,z,r)=>collision.canOccupyXZ(x,z,r)});
   const director=new MissionDirector(fire,context.fireTruckPosition,getTerrainHeight);director.startAfterPreparation();
   const check=()=>{const source=fire.sources.at(-1);assert.equal(source.flames.visibleTongueCount,source.flames.anchors.length);assert.ok(source.flames.anchors.every((anchor)=>anchor.valid));};
-  check();fire.extinguishNearest(director.accessFire.object.position,1,10);director.update(.1,context,0);director.requestReinforcements(director.radioPosition);check();
+  fire.extinguishNearest(director.accessFire.object.position,1,10);
+  fire.update(1.2, context); director.update(1.2,context,0);
+  fire.update(1.5, context); director.update(1.5,context,0);
+  assert.equal(director.currentStage, 'radio');
+  director.requestReinforcements(director.radioPosition); check();
   fire.extinguishNearest(director.criticalFires[0].object.position,1,10);director.update(.1,context,0);
   for(const source of director.criticalFires){assert.equal(source.flames.visibleTongueCount,FIRE_VISUAL.criticalTongues);assert.ok(source.flames.anchors.every((anchor)=>anchor.valid));}
 });
@@ -366,10 +372,15 @@ test('recorrido único: acceso → radio → vivienda → bosque; no hay inciden
   director.startAfterPreparation();
   assert.equal(director.currentStage, 'access');
   assert.equal(fire.count, 1);
+  assert.equal(director.statusMessage, '');
   fire.extinguishNearest(new THREE.Vector3(-7, 0, -9), 1, 10);
-  director.update(0.1, context, 0);
+  fire.update(0.1, context); director.update(0.1, context, 0);
+  assert.equal(director.currentStage, 'access');
+  fire.update(1.1, context); director.update(1.1, context, 0);
+  fire.update(0.4, context); director.update(0.4, context, 0);
   assert.equal(director.currentStage, 'radio');
   assert.equal(fire.activeCount, 0);
+  assert.match(director.statusMessage, /Buen trabajo.*pedí ayuda por radio/);
   assert.equal(director.requestReinforcements(new THREE.Vector3()), false);
   assert.equal(director.requestReinforcements(director.radioPosition), true);
   assert.equal(director.currentStage, 'house');
@@ -882,7 +893,7 @@ function investigationFixture() {
 function completeInvestigation(fixture, mask = 0) {
   const { tour, companion, camera } = fixture;
   assert.equal(tour.interact(camera.position), true);
-  assert.match(fixture.dialogues[0], /Encontraron algunos indicios/);
+  assert.match(fixture.dialogues[0], /Encontramos algunos indicios/);
   tour.continueDialogue();
   for (let i = 0; i < 3; i++) {
     assert.equal(tour.navigationTarget.label, INVESTIGATION_STATIONS[i].title);
@@ -1377,7 +1388,7 @@ test('rescate completo: entrega única, zorro dentro, traslado externo y animal 
   assert.ok(tour.carrier.parent === tour.rescue.view.station.socket);
   assert.equal(tour.animals.fox.visible, true);
   assert.equal(tour.carrier.visible, true);
-  assert.match(f.dialogues.at(-1).text, /Queda al cuidado del equipo/);
+  assert.match(f.dialogues.at(-1).text, /El equipo queda a cargo del zorro/);
   tour.rescue.continueDialogue();
   assert.equal(f.completed, 1);
   assert.equal(flow.rescueCompletionCount, 1);

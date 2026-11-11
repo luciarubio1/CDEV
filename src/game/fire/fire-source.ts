@@ -51,6 +51,7 @@ export class FireSource {
   get startingIntensity():number{return this.initialIntensity;}
   get activeDuration():number{return this.elapsed;}
   get isActive():boolean{return this.active;}
+  get isFullyExtinguished(): boolean { return !this.active && this.tail <= 0; }
   get remainingResistance():number{return this.resistance;}
   get extinguishProgress():number{return 1-this.resistance/this.initialResistance;}
 

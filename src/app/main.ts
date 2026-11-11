@@ -74,7 +74,6 @@ const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) {
   throw new Error('No se encontró el contenedor principal de la aplicación.');
 }
-
 const gameSession = new GameSession();
 const gameStats = new GameStats();
 const introDialogue = new IntroDialogue();
@@ -263,7 +262,7 @@ defeatOverlay.innerHTML = `
     <strong class="result-eyebrow">Fin de la experiencia</strong>
     <h1 id="defeat-title"></h1>
     <p class="defeat-reflection"></p>
-    <p class="impact-message">Incluso cuando las llamas se apagan, el impacto sobre el suelo y la vegetación permanece.</p>
+    <p class="impact-message">Aunque las llamas se apaguen, el suelo y la vegetación pueden tardar en recuperarse.</p>
     <ul class="awareness-ideas" hidden></ul>
     <p class="real-emergency-message">${REAL_EMERGENCY_NOTICE}</p>
     <div class="defeat-actions">
@@ -454,12 +453,23 @@ const faunaTour = new FaunaTour(postFire, reinforcementView, collisionSystem, ge
   guideDialogueOverlay.querySelector('strong')!.textContent = title;
   guideDialogueText!.textContent = text;
   guideDialogueOverlay.classList.add('visible');
+  const narrationByText: Record<string, NarrationName> = {
+    'Este animal encontró un lugar seguro. Sigamos.': 'fauna-refuge',
+    'Este zorro necesita ayuda. Avisemos al equipo.': 'fauna-fox-found',
+    'Gracias por avisar. Traé el transportín y yo me ocupo de revisarlo.': 'fauna-veterinarian',
+    'Encontramos un zorro que necesita ayuda. El equipo ya viene.': 'fauna-radio',
+    'Es un zorro gris pampeano, un animal nativo de Córdoba. Su nombre científico es Lycalopex gymnocercus y el equipo debe revisarlo.': 'fauna-identification',
+    'Acompañanos al puesto y dejá espacio para que el equipo de especialistas trabaje.': 'fauna-transfer',
+    'El equipo queda a cargo del zorro. Ayudar también es avisar y dejar espacio.': 'fauna-rescue-end',
+  };
+  const narration = narrationByText[text];
+  if (narration) audioManager.playNarration(narration);
   queueMicrotask(() => guideDialogueButton?.focus());
 }, { camera, onRescueCompleted: () => {
   gameStats.recordAccompaniedRescue();
   bitacora.unlockEntry(FOX_NOTE);
   OTHER_FAUNA_NOTES.forEach((note) => bitacora.unlockEntry(note));
-} });
+}, onStarted: () => audioManager.playNarration('fauna-trail-start') });
 scene.add(faunaTour.object);
 function skipRescue(): void {
   if (!faunaTour.rescue.cameraLocked) return;
@@ -553,6 +563,11 @@ const investigation = new InvestigationTour(reinforcementView, camera, getTerrai
     guideDialogueOverlay.querySelector('strong')!.textContent = 'Compañero';
     guideDialogueText!.textContent = text;
     guideDialogueOverlay.classList.add('visible');
+    if (text === 'Encontramos algunos indicios junto al sendero. Vamos a observarlos y entender qué pudo pasar.') {
+      audioManager.playNarration('investigation');
+    } else if (text === 'Contener el fuego fue una parte. Cuidar a quienes quedaron y comprender lo ocurrido también forma parte de la respuesta.') {
+      audioManager.playNarration('investigation-closing');
+    }
     queueMicrotask(() => guideDialogueButton?.focus());
   },
   () => {
@@ -578,6 +593,10 @@ function finishExperience(): void {
   audioManager.stopAllLoops();
   gameMenuButton.hidden = true;
   configureAwarenessEnding(defeatOverlay);
+  audioManager.playNarrationSequence(
+    ['ending-mission', 'ending-education', 'ending-safety'],
+    (name) => { status.textContent = narrationSubtitles[name]; },
+  );
   defeatOverlay.classList.add('visible');
   defeatOverlay.scrollTop = 0;
   if (defeatMessage) defeatMessage.tabIndex = -1;
@@ -829,14 +848,34 @@ let reloadedAt = Number.NEGATIVE_INFINITY;
 let equipmentReadyAt = Number.NEGATIVE_INFINITY;
 let audioStatusUntil = Number.NEGATIVE_INFINITY;
 let audioStatusMessage = '';
-let firstFireNarrationPlayed = false;
+let radioNarrationPlayed = false;
+let radioConfirmationPlayed = false;
+let houseProtectedNarrationPlayed = false;
+let finalFireNarrationPlayed = false;
 const narrationSubtitles: Record<NarrationName, string> = {
   'intro-01': 'El fuego avanza.',
   'intro-02': 'Protejamos la casa y el bosque.',
   'intro-03': 'Prepará el equipo.',
   'mission-01': '¡Equipo listo!',
-  'mission-02': 'Apagá el fuego.',
+  'mission-02': '¡Buen trabajo! Volvé al camión y pedí ayuda por radio.',
   'safety-01': 'En un incendio real: alejate y avisá.',
+  'ending-mission': 'El fuego fue controlado, pero nuestra tarea no termina acá.',
+  'ending-education': 'Prevenir incendios es responsabilidad de todos.',
+  'ending-safety': 'Ante un incendio real: alejate y avisá.',
+  'fauna-trail-start': 'Revisemos el sendero con atención.',
+  'fauna-refuge': 'Este animal encontró un lugar seguro.',
+  'fauna-fox-found': 'Este zorro necesita ayuda.',
+  'fauna-radio': 'El equipo ya viene.',
+  'fauna-veterinarian': 'Traé el transportín.',
+  'fauna-identification': 'Es un zorro gris pampeano.',
+  'fauna-transfer': 'Acompañanos al puesto.',
+  'fauna-rescue-end': 'El equipo queda a cargo del zorro.',
+  preparation: 'Primero, prepará el equipo.',
+  radio: '¡Ayuda en camino! Protegé la casa y después el bosque.',
+  'house-protected': '¡Casa protegida! Ahora cuidá el bosque.',
+  'final-fire': '¡Fuego controlado!',
+  investigation: 'Encontramos algunos indicios junto al sendero.',
+  'investigation-closing': 'Contener el fuego fue una parte.',
 };
 let damageVignetteOpacity = 0;
 let waveNoticeUntil = Number.NEGATIVE_INFINITY;
@@ -905,7 +944,7 @@ function showGuideDialogue(): void {
   guideDialogueOverlay.classList.add('visible');
   if (!introDialogue.isComplete) {
     audioManager.playNarrationSequence(
-      ['intro-01', 'intro-02', 'intro-03', 'safety-01'],
+      ['intro-01', 'intro-02', 'preparation', 'safety-01'],
       (name) => {
         if (guideDialogueText) guideDialogueText.textContent = narrationSubtitles[name];
       },
@@ -1055,14 +1094,14 @@ function endGame(reason: DefeatReason): void {
   if (defeatReflection) {
     defeatReflection.textContent =
       reason === 'player'
-        ? 'La cercanía al fuego puede volver peligrosa cualquier intervención. La preparación, la distancia y el equipo adecuado ayudan a reducir la exposición.'
+        ? 'Acercarse al fuego puede ser peligroso. La preparación, la distancia y el equipo adecuado ayudan a trabajar con más seguridad.'
         : 'La prevención y la detección temprana son claves para evitar que el fuego alcance zonas habitadas. Actuar a tiempo permite proteger más vidas y hogares.';
   }
   if (reason === 'forest') {
     if (defeatMessage) defeatMessage.textContent = 'El bosque nativo superó el umbral de daño';
     if (defeatReflection) {
       defeatReflection.textContent =
-        'El daño acumulado sobre la vegetación muestra por qué proteger el bosque nativo importa para la flora, la fauna y la recuperación del suelo.';
+        'El daño acumulado sobre la vegetación muestra por qué proteger el bosque nativo ayuda a las plantas, los animales y la recuperación del suelo.';
     }
   }
   defeatOverlay.classList.add('visible');
@@ -1448,6 +1487,10 @@ window.addEventListener('keydown', (event) => {
       missionDirector.requestReinforcements(camera.position)
     ) {
       audioManager.playRadioBeep();
+      if (!radioConfirmationPlayed) {
+        radioConfirmationPlayed = true;
+        audioManager.playNarration('radio');
+      }
       gameStats.recordMissionRoute(missionDirector.routeLabel);
       truckEmergencyLights.triggerEmergencyFlash();
       return;
@@ -1648,6 +1691,17 @@ function animate(): void {
           },
           houseRisk.exposureRatio,
         );
+        if (missionDirector.currentStage === 'radio' && !radioNarrationPlayed) {
+          radioNarrationPlayed = true;
+          audioManager.playNarrationSequence(
+            ['mission-02'],
+            (name) => { status.textContent = narrationSubtitles[name]; },
+          );
+        }
+        if (missionDirector.currentStage === 'forest' && !houseProtectedNarrationPlayed) {
+          houseProtectedNarrationPlayed = true;
+          audioManager.playNarration('house-protected');
+        }
 
         if (playerHealth.isDepleted) {
           endGame('player');
@@ -1657,6 +1711,10 @@ function animate(): void {
         } else if (missionUpdate.failure === 'forest') {
           endGame('forest');
         } else if (missionUpdate.victory) {
+          if (!finalFireNarrationPlayed) {
+            finalFireNarrationPlayed = true;
+            audioManager.playNarration('final-fire');
+          }
           startContainment();
         }
 
@@ -1672,16 +1730,6 @@ function animate(): void {
 
           const canSpray = usingHose && !waterTank.isEmpty;
           if (canSpray && nearestFire && aimedAtFire) {
-            if (
-              !firstFireNarrationPlayed &&
-              missionDirector.currentStage === 'access'
-            ) {
-              firstFireNarrationPlayed = true;
-              audioManager.playNarrationSequence(
-                ['mission-02'],
-                (name) => { status.textContent = narrationSubtitles[name]; },
-              );
-            }
             const impactTime = fireSystem.getRemainingImpactTime(camera.position, GAME_BALANCE.hose.interactionRadius, EXTINGUISH_RATE_PER_SECOND);
             const activeTime = waterTank.consume(Math.min(delta, impactTime));
             const waterHit = activeTime > 0

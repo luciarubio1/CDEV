@@ -32,7 +32,7 @@ export class FaunaTour {
     private readonly collisions: CollisionSystem,
     private readonly terrain: (x: number, z: number) => number,
     private readonly showDialogue: (title: string, text: string) => void,
-    options: { camera?: THREE.Camera; onRescueCompleted?: () => void } = {},
+    options: { camera?: THREE.Camera; onRescueCompleted?: () => void; onStarted?: () => void } = {},
   ) {
     this.animals = new FaunaAnimals(terrain);
     this.veterinarian = new VeterinarianView(terrain);
@@ -44,7 +44,9 @@ export class FaunaTour {
       options.camera ?? new THREE.PerspectiveCamera(60,16/9,0.1,100), showDialogue, options.onRescueCompleted ?? (() => {}));
     this.object.add(this.rescue.view.object);
     this.object.visible = false;
+    this.onStarted = options.onStarted ?? (() => {});
   }
+  private readonly onStarted: () => void;
   get isActive(): boolean { return this.started; }
   get isWaiting(): boolean { return this.rescue.isActive ? this.rescue.isWaiting : this.waiting; }
   get noticeSent(): boolean { return this.reported; }
@@ -59,6 +61,7 @@ export class FaunaTour {
   start(): void {
     if (this.started || !this.flow.advanceFauna('fauna-walk-a')) return;
     this.started = true;
+    this.onStarted();
     this.object.visible = this.animals.object.visible = true;
     this.walker = new WaypointWalker(FAUNA_CONFIG.routeA, FAUNA_CONFIG.companionSpeed, this.terrain);
   }
@@ -91,7 +94,7 @@ export class FaunaTour {
       turnTowards(this.companion.companion, Math.atan2(this.walker.direction.x, this.walker.direction.z), delta);
       if (this.walker.finished && !this.waiting) {
         if (stage === 'fauna-walk-a') this.flow.advanceFauna('fauna-refuge');
-        else if (this.flow.advanceFauna('fauna-dialogue-b'))         this.showDialogue('Compañero', 'Este zorro necesita ayuda. Avisemos al equipo.');
+        else if (this.flow.advanceFauna('fauna-dialogue-b')) this.showDialogue('Compañero', 'Este zorro necesita ayuda. Avisemos al equipo.');
       }
     } else if (stage === 'fauna-refuge') {
       this.animals.setSmallAnimalMoving(true);
@@ -100,7 +103,7 @@ export class FaunaTour {
       this.animals.smallAnimal.rotation.y = -Math.atan2(this.refugeWalker.direction.z, this.refugeWalker.direction.x);
       if (this.refugeWalker.finished && this.flow.advanceFauna('fauna-dialogue-a')) {
         this.animals.smallAnimal.visible = false;
-        this.showDialogue('Compañero', 'Este encontró un lugar seguro. Sigamos.');
+        this.showDialogue('Compañero', 'Este animal encontró un lugar seguro. Sigamos.');
       }
     } else if (stage === 'vet-arriving') {
       this.veterinarian.arrive(delta);
@@ -110,7 +113,7 @@ export class FaunaTour {
       this.evaluationElapsed += delta;
       this.veterinarian.evaluate(this.evaluationElapsed / FAUNA_CONFIG.evaluationSeconds);
       if (this.evaluationElapsed >= FAUNA_CONFIG.evaluationSeconds && this.flow.advanceFauna('vet-dialogue')) {
-        this.showDialogue('Veterinario', 'Gracias por avisar. Traé el transportín y yo lo reviso.');
+        this.showDialogue('Veterinario', 'Gracias por avisar. Traé el transportín y yo me ocupo de revisarlo.');
       }
     }
   }

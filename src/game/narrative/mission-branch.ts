@@ -23,14 +23,14 @@ export interface MissionBranchConfig {
 }
 
 export const REAL_EMERGENCY_NOTICE =
-  'Esta experiencia es ficción educativa. Ante un incendio real, avisá a los servicios de emergencia y seguí las indicaciones de las autoridades.';
+  'Esta experiencia es una ficción educativa. Ante un incendio real, alejate, avisá a los servicios de emergencia y seguí las indicaciones de las autoridades.';
 
 export const MISSION_BRANCHES: Record<MissionRoute, MissionBranchConfig> = {
   house: {
     route: 'house',
     label: 'Priorizar la vivienda',
     hudLabel: 'Ruta: vivienda',
-    objective: 'Objetivo 3: evitá que el fuego alcance la vivienda',
+    objective: 'Objetivo 3: evitá que el fuego llegue a la vivienda',
     criticalFirePositions: [new THREE.Vector3(5.5, 0, 8)],
     criticalIntensity: 1.05,
     markerColor: 0xe63946,
@@ -38,16 +38,16 @@ export const MISSION_BRANCHES: Record<MissionRoute, MissionBranchConfig> = {
     finalMaxModerateFires: 1,
     finalFirePositions: [new THREE.Vector3(-10, 0, -10)],
     finalFireTimes: [13],
-    npcMessage: 'Priorizá la vivienda. Mantené el riesgo bajo mientras llegan los refuerzos.',
+    npcMessage: 'Priorizá la vivienda. Mantené el fuego controlado mientras llegan los refuerzos.',
     victoryTitle: 'La vivienda fue protegida',
     victoryReflection:
-      'La detección temprana, la comunicación y la protección de zonas habitadas reducen el impacto de los incendios.',
+      'Detectar el fuego a tiempo, comunicarse y proteger las casas ayuda a reducir el impacto de los incendios.',
   },
   forest: {
     route: 'forest',
     label: 'Priorizar el bosque nativo',
     hudLabel: 'Ruta: bosque nativo',
-    objective: 'Objetivo 3: contené el avance hacia el bosque nativo',
+    objective: 'Objetivo 3: evitá que el fuego avance hacia el bosque nativo',
     criticalFirePositions: [new THREE.Vector3(-13, 0, -10), new THREE.Vector3(-10, 0, -13)],
     criticalIntensity: 0.82,
     markerColor: 0x55b86a,
@@ -57,10 +57,10 @@ export const MISSION_BRANCHES: Record<MissionRoute, MissionBranchConfig> = {
     finalFireTimes: [14],
     forestBurnedElementLimit: 8,
     forestZone: { position: new THREE.Vector3(-12, 0, -11), radius: 5.2 },
-    npcMessage: 'Priorizá el bosque nativo. Contené los focos antes de que el daño a la vegetación supere el límite.',
+    npcMessage: 'Priorizá el bosque nativo. Controlá los focos antes de que dañen más la vegetación.',
     victoryTitle: 'El bosque nativo fue contenido',
     victoryReflection:
-      'La protección de flora, fauna y suelo es parte de la recuperación de los ecosistemas afectados por el fuego.',
+      'Proteger las plantas, los animales y el suelo ayuda a que el lugar se recupere después del fuego.',
   },
 };
 

@@ -56,7 +56,7 @@ export const EPILOGUE_DISCOVERABLES: readonly DiscoverableDefinition[] = [
   {
     id: 'drought', title: 'Sequía y vegetación seca', kind: 'sign', category: 'Comprender el incendio', epilogueOnly: true,
     position: new THREE.Vector3(-10, 0, 11.5),
-    text: 'Condición que favorece la propagación: la falta de lluvias puede secar la vegetación, que funciona como combustible. No es, por sí sola, una fuente de ignición.',
+    text: 'Condición de propagación: la falta de lluvias seca la vegetación y facilita que el fuego se extienda. La sequía no enciende por sí sola un incendio. Este sector no permite identificar su origen.',
   },
   {
     id: 'embers', title: 'Brasas de un asado mal apagadas', kind: 'backpack', category: 'Comprender el incendio', epilogueOnly: true,

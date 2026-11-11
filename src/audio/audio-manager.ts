@@ -6,12 +6,28 @@ import radioBeepUrl from './radio beep.mp3';
 import sirenUrl from './siren.mp3';
 import truckRefillUrl from './truck-refill.mp3';
 import waterSprayUrl from './water-spray.mp3';
-import introOneUrl from './intro_1.mp3';
-import introTwoUrl from './intro-2.mp3';
-import introThreeUrl from './intro-3.mp3';
+import introOneUrl from './inicio_1.mp3';
+import introTwoUrl from './inicio_2.mp3';
 import missionOneUrl from './mission-01.mp3';
 import missionTwoUrl from './mission-02.mp3';
 import safetyOneUrl from './safety-01.mp3';
+import endingMissionUrl from './mision_cumplida.mp3';
+import endingEducationUrl from './mensaje_educativo.mp3';
+import endingSafetyUrl from './aviso_de_seguridad.mp3';
+import faunaTrailStartUrl from './inicio_sendero.mp3';
+import faunaRefugeUrl from './animal_refugio.mp3';
+import faunaFoxFoundUrl from './zorro_encontrado.mp3';
+import faunaRadioUrl from './aviso_zorro_radio.mp3';
+import faunaVeterinarianUrl from './veterinario.mp3';
+import faunaIdentificationUrl from './identificacion_zorro.mp3';
+import faunaTransferUrl from './traslado.mp3';
+import faunaRescueEndUrl from './cierre_de_rescate.mp3';
+import preparationUrl from './preparacion.mp3';
+import radioUrl from './radio.mp3';
+import houseProtectedUrl from './casa_protegida.mp3';
+import finalFireUrl from './final del incendio.mp3';
+import investigationUrl from './investigacion.mp3';
+import investigationClosingUrl from './cierre de investigacion.mp3';
 
 export const AUDIO_VOLUMES = {
   ambience: 0.2,
@@ -28,7 +44,12 @@ export const FIRE_AUDIO_FALLOFF_DISTANCE = 22;
 
 type LoopSoundName = 'ambience' | 'fire' | 'waterSpray' | 'siren';
 type OneShotSoundName = 'truckRefill' | 'defeat' | 'sirenCue' | 'radioBeep';
-export type NarrationName = 'intro-01' | 'intro-02' | 'intro-03' | 'mission-01' | 'mission-02' | 'safety-01';
+export type NarrationName =
+  | 'intro-01' | 'intro-02' | 'intro-03' | 'mission-01' | 'mission-02' | 'safety-01'
+  | 'ending-mission' | 'ending-education' | 'ending-safety'
+  | 'fauna-trail-start' | 'fauna-refuge' | 'fauna-fox-found' | 'fauna-radio'
+  | 'fauna-veterinarian' | 'fauna-identification' | 'fauna-transfer' | 'fauna-rescue-end'
+  | 'preparation' | 'radio' | 'house-protected' | 'final-fire' | 'investigation' | 'investigation-closing';
 
 function createAudio(url: string, loop = false): HTMLAudioElement {
   const audio = new Audio(url);
@@ -58,10 +79,27 @@ export class AudioManager {
   private readonly narration: Record<NarrationName, HTMLAudioElement> = {
     'intro-01': createAudio(introOneUrl),
     'intro-02': createAudio(introTwoUrl),
-    'intro-03': createAudio(introThreeUrl),
+    'intro-03': createAudio(preparationUrl),
     'mission-01': createAudio(missionOneUrl),
     'mission-02': createAudio(missionTwoUrl),
     'safety-01': createAudio(safetyOneUrl),
+    'ending-mission': createAudio(endingMissionUrl),
+    'ending-education': createAudio(endingEducationUrl),
+    'ending-safety': createAudio(endingSafetyUrl),
+    'fauna-trail-start': createAudio(faunaTrailStartUrl),
+    'fauna-refuge': createAudio(faunaRefugeUrl),
+    'fauna-fox-found': createAudio(faunaFoxFoundUrl),
+    'fauna-radio': createAudio(faunaRadioUrl),
+    'fauna-veterinarian': createAudio(faunaVeterinarianUrl),
+    'fauna-identification': createAudio(faunaIdentificationUrl),
+    'fauna-transfer': createAudio(faunaTransferUrl),
+    'fauna-rescue-end': createAudio(faunaRescueEndUrl),
+    preparation: createAudio(preparationUrl),
+    radio: createAudio(radioUrl),
+    'house-protected': createAudio(houseProtectedUrl),
+    'final-fire': createAudio(finalFireUrl),
+    investigation: createAudio(investigationUrl),
+    'investigation-closing': createAudio(investigationClosingUrl),
   };
   private narrationSequenceToken = 0;
 
