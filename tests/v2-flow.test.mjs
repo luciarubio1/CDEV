@@ -147,8 +147,9 @@ test('humo y chispas responden al viento; la misión conserva sus referencias si
   assert.equal(director.accessFire,fire.sources[0]);
   assert.ok(director.getNavigationTarget(context.playerPosition,context.housePosition).position.distanceTo(fire.sources[0].object.position)<1e-8);
   const result=fire.extinguishNearest(fire.sources[0].object.position,1,100);assert.equal(result.extinguished,true);
-  director.update(.1,context,0);assert.equal(director.currentStage,'radio');
-  assert.equal(director.requestReinforcements(director.radioPosition),true);assert.equal(director.currentStage,'house');assert.equal(director.criticalFires[0],fire.sources[1]);
+  director.update(.1,context,0);assert.equal(director.currentStage,'radio');assert.equal(director.radio.visible,true);
+  assert.equal(director.requestReinforcements(director.radioPosition),true);assert.equal(director.currentStage,'house');assert.equal(director.radio.visible,true);assert.equal(director.criticalFires[0],fire.sources[1]);
+  assert.equal(director.requestReinforcements(director.radioPosition),false);director.update(.6,context,0);assert.equal(director.radio.visible,false);
 });
 
 test('los focos reales de misión mantienen todas sus llamas junto a los obstáculos actuales', () => {
@@ -630,7 +631,6 @@ test('acompañamiento con histéresis: no alterna en el umbral y retoma al acerc
   assert.equal(gate.update(NPC_MOVEMENT.resumeDistance), true);
   assert.equal(gate.update(4.5), true);
   assert.ok(NPC_MOVEMENT.companionSpeed < GAME_BALANCE.movement.speed);
-  assert.equal(RESCUE_CONFIG.loadingSeconds, 9);
   assert.equal(RESCUE_CONFIG.placementSeconds, 4);
   assert.equal(FAUNA_CONFIG.evaluationSeconds, 2.5);
 });
@@ -711,7 +711,8 @@ test('cámara de rescate externa al inicio/medio/final; completo y omitido resta
   }
   for (const terrainHeight of [terrain, getTerrainHeight]) {
     const full = run(null, terrainHeight);
-    for (const stage of ['rescue-loading', 'rescue-walk', 'rescue-placing']) {
+    assert.equal(full.sampled.has('rescue-loading'), false);
+    for (const stage of ['rescue-walk', 'rescue-placing']) {
       assert.ok(full.sampled.has(stage));
       const skipped = run(stage, terrainHeight);
       assert.deepEqual(skipped.position, full.position);
@@ -740,11 +741,36 @@ test('créditos del cierre reutilizan el menú y vuelven al panel sin iniciar ot
 
 const { InvestigationTour } = await import('../src/game/narrative/investigation-tour.ts');
 const { InvestigationProgress, INVESTIGATION_STATIONS, INVESTIGATION_RETURN_ROUTE, INVESTIGATION_SETTINGS } = await import('../src/game/narrative/investigation-data.ts');
-const { DiscoverableSystem } = await import('../src/game/narrative/discoverables.ts');
+const { DiscoverableSystem, DISCOVERABLES } = await import('../src/game/narrative/discoverables.ts');
 const { InvestigationView } = await import('../src/game/world/investigation-view.ts');
 const { InspectionCamera } = await import('../src/game/narrative/inspection-camera.ts');
 const { INSPECTION_FRAMES, INVESTIGATION_STYLE } = await import('../src/game/world/investigation-style.ts');
 const { inspectionGroundHeight } = await import('../src/game/world/investigation-models.ts');
+
+test('hallazgos opcionales: las cinco formas y nombres se leen antes de abrir la ficha', () => {
+  const discoveries = new DiscoverableSystem(() => 0);
+  assert.equal(DISCOVERABLES.length, 5);
+  const expected = ['Cartel de fogón seguro', 'Mochila de respuesta', 'Huellas en el sendero', 'Árbol quemado y suelo expuesto', 'Puesto de observación'];
+  DISCOVERABLES.forEach((item, index) => {
+    assert.equal(item.title, expected[index]);
+    assert.ok(item.text.split('.').length >= 2);
+    const context = discoveries.getContext(item.position);
+    assert.equal(context?.definition.id, item.id);
+    assert.equal(context?.withinInteractionRadius, true);
+  });
+  const entries = discoveries.entries;
+  const footprints = entries.find((entry) => entry.definition.id === 'fauna').object;
+  assert.ok(footprints.children.some((child) => child instanceof THREE.Group && child.children.length === 4));
+  const lookout = entries.find((entry) => entry.definition.id === 'community').object;
+  assert.ok(lookout.children.filter((child) => child instanceof THREE.Mesh && child.geometry.type === 'CylinderGeometry').length >= 5);
+  entries.forEach((entry) => {
+    entry.object.updateMatrixWorld(true);
+    const markerBox = new THREE.Box3().setFromObject(entry.marker);
+    const subjectBox = new THREE.Box3();
+    entry.object.children.filter((child) => child !== entry.marker).forEach((child) => subjectBox.union(new THREE.Box3().setFromObject(child)));
+    assert.equal(markerBox.intersectsBox(subjectBox), false, `${entry.definition.id}: el marcador no tapa la forma`);
+  });
+});
 
 test('estaciones frías: hojas finas, grietas, materiales distintos e indicadores fuera de los indicios', () => {
   const view=new InvestigationView(getTerrainHeight),other=new InvestigationView(getTerrainHeight);
@@ -760,17 +786,17 @@ test('estaciones frías: hojas finas, grietas, materiales distintos e indicadore
   const markerBox=new THREE.Box3().setFromObject(view.markers[1]),grillBox=new THREE.Box3();
   view.subjects[1].traverse((node)=>{if(node.name.startsWith('grill-'))grillBox.union(new THREE.Box3().setFromObject(node));});
   assert.equal(markerBox.intersectsBox(grillBox),false);
-  const cigarette=view.subjects[2];
-  assert.equal(new THREE.Box3().setFromObject(view.markers[2]).intersectsBox(new THREE.Box3().setFromObject(cigarette)),false);
-  const size=new THREE.Box3().setFromObject(cigarette).getSize(new THREE.Vector3());assert.ok(size.length()<.08);
-  for(const name of ['cigarette-filter','cigarette-paper','cigarette-consumed-end','cigarette-ash'])assert.ok(cigarette.getObjectByName(name));
+  const match=view.subjects[2];
+  assert.equal(new THREE.Box3().setFromObject(view.markers[2]).intersectsBox(new THREE.Box3().setFromObject(match)),false);
+  const size=new THREE.Box3().setFromObject(match).getSize(new THREE.Vector3());assert.ok(size.length()<.08);
+  for(const name of ['match-stick','spent-match-head'])assert.ok(match.getObjectByName(name));
   view.object.traverse((node)=>{
     assert.equal(Boolean(node.isLight),false);
     if(node.isMesh){assert.notEqual(node.geometry.type,'ConeGeometry');if(node.material.emissive)assert.equal(node.material.emissive.getHex(),0);}
   });
 });
 
-test('apoyo milimétrico de colilla coincide con los triángulos reales del terreno', () => {
+test('apoyo milimétrico del fósforo coincide con los triángulos reales del terreno', () => {
   const terrainMesh=createTerrain();terrainMesh.updateMatrixWorld(true);
   const point=INVESTIGATION_STATIONS[2].position,ray=new THREE.Raycaster(new THREE.Vector3(point.x,20,point.z),new THREE.Vector3(0,-1,0));
   const hit=ray.intersectObject(terrainMesh)[0];assert.ok(hit);
@@ -807,15 +833,27 @@ test('inspecciones ajustan el encuadre, evitan el suelo y restauran lente, pose 
       assert.ok(camera.position.y>=getTerrainHeight(camera.position.x,camera.position.z)+INSPECTION_FRAMES[index].groundClearance-1e-7);
     }
     inspection.update(.01);camera.updateMatrixWorld(true);
+    if (index===0) {
+      const table=RESCUE_CONFIG.station;
+      const corners=[];
+      for(const x of [-.95,.95])for(const y of [0,1.7])for(const z of [-.6,.6]) {
+        corners.push(new THREE.Vector3(table.x+x,getTerrainHeight(table.x,table.z)+y,table.z+z).project(camera));
+      }
+      assert.ok(corners.every((corner)=>corner.x>1||corner.x< -1||corner.y>1||corner.y< -1||corner.z>1||corner.z< -1), `la mesa queda fuera de la inspección del pasto: ${corners.map((corner)=>corner.toArray())}`);
+      const grassDistance=camera.position.distanceTo(view.subjects[index].getWorldPosition(new THREE.Vector3()));
+      assert.ok(grassDistance<5, `la cámara se acerca al pasto: ${grassDistance}`);
+    }
     const box=new THREE.Box3().setFromObject(view.subjects[index]);
     for(const x of [box.min.x,box.max.x])for(const y of [box.min.y,box.max.y])for(const z of [box.min.z,box.max.z]){
       const corner=new THREE.Vector3(x,y,z),depth=-corner.clone().applyMatrix4(camera.matrixWorldInverse).z,ndc=corner.project(camera);
-      assert.ok(depth>camera.near);
-      assert.ok(ndc.x>-1&&ndc.x<1&&ndc.y>-1&&ndc.y<1,`fuera de cuadro ${index}: ${ndc.toArray()}`);
-      if(aspect>1)assert.ok(ndc.x<.24,`tarjeta tapa ${index}: ${ndc.x}`);
-      else assert.ok(ndc.y>-.08,`tarjeta inferior tapa ${index}: ${ndc.y}`);
+      if (index!==0) {
+        assert.ok(depth>camera.near);
+        assert.ok(ndc.x>-1&&ndc.x<1&&ndc.y>-1&&ndc.y<1,`fuera de cuadro ${index}: ${ndc.toArray()}`);
+        if(aspect>1)assert.ok(ndc.x<.24,`tarjeta tapa ${index}: ${ndc.x}`);
+        else assert.ok(ndc.y>-.08,`tarjeta inferior tapa ${index}: ${ndc.y}`);
+      }
     }
-    assert.deepEqual(new THREE.Box3().setFromObject(view.subjects[index]).getSize(new THREE.Vector3()).toArray(),subjectSize);
+    assert.ok(new THREE.Box3().setFromObject(view.subjects[index]).getSize(new THREE.Vector3()).toArray().every((value,axis)=>Math.abs(value-subjectSize[axis])<1e-12));
     inspection.restore();inspection.restore();
     assert.deepEqual(camera.position.toArray(),saved.position);assert.deepEqual(camera.quaternion.toArray(),saved.rotation);
     assert.deepEqual(camera.projectionMatrix.toArray(),saved.projection);assert.equal(camera.near,saved.near);assert.equal(camera.fov,saved.fov);assert.equal(camera.zoom,saved.zoom);assert.deepEqual(camera.view,saved.view);
@@ -1325,11 +1363,12 @@ test('rescate completo: entrega única, zorro dentro, traslado externo y animal 
   camera.updateWorldMatrix(true,true);
   const heldWorld = tour.carrier.getWorldPosition(new THREE.Vector3());
   tour.rescue.continueDialogue();
-  assert.ok(tour.carrier.getWorldPosition(new THREE.Vector3()).distanceTo(heldWorld) < 1e-8);
+  assert.ok(tour.carrier.getWorldPosition(new THREE.Vector3()).distanceTo(heldWorld) > 1);
+  assert.equal(flow.currentStage, 'rescue-ready');
+  assert.equal(tour.animals.fox.parent, tour.carrier);
   const start = tour.carrier.position.clone();
   tour.rescue.update(10, camera.position, true);
   assert.equal(tour.carrier.position.distanceTo(start), 0);
-  for (let i=0;i<91 && flow.currentStage==='rescue-loading';i++) tour.rescue.update(0.1, camera.position, false);
   assert.equal(flow.currentStage, 'rescue-ready');
   assert.ok(tour.animals.fox.parent === tour.carrier);
   assert.ok(tour.carrier.parent === tour.veterinarian.object);
@@ -1389,7 +1428,7 @@ test('rescate completo: entrega única, zorro dentro, traslado externo y animal 
   assert.equal(flow.rescueCompletionCount, 1);
   assert.equal(f.session.isOver, false);
   assert.equal(tour.rescue.interact(tour.carrier.getWorldPosition(new THREE.Vector3())), false);
-  t.diagnostic(`Animaciones y traslado simulado: ${(walkSeconds + RESCUE_CONFIG.loadingSeconds + RESCUE_CONFIG.placementSeconds).toFixed(1)} s; no incluye ida/vuelta del jugador ni lectura.`);
+  t.diagnostic(`Traslado y colocación simulados: ${(walkSeconds + RESCUE_CONFIG.placementSeconds).toFixed(1)} s; no incluye ida/vuelta del jugador ni lectura.`);
 });
 
 test('ficha automática única y dos especies opcionales con enlaces oficiales en la bitácora', () => {

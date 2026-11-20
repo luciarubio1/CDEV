@@ -122,7 +122,7 @@ export class InvestigationTour {
     this.bitacora.showQuestion(station, station.question, station.options, (option) => {
       this.progress.answer(index, option);
       this.view.markers[index].visible = false;
-      return `${option === 0 ? 'Esa lectura distingue el indicio de una causa confirmada.' : 'Gracias por observar. Revisemos qué podemos afirmar.'}\n${station.feedback}`;
+      return station.feedbackByOption[option];
     }, () => {
       this.inspection.restore();
       if (this.progress.count === 3) {

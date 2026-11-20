@@ -29,7 +29,7 @@ Los personajes, vehículos provisionales, puestos, indicios y varios efectos se 
 | Fuente | Relación con el contenido |
 | --- | --- |
 | [SINAGIR · Incendio forestal](https://www.argentina.gob.ar/sinagir/incendio-forestal) | Condiciones ambientales y propagación; posibles fuentes humanas de ignición. Vegetación seca y contexto de investigación. |
-| [SNMF · Prevención de incendios forestales](https://www.argentina.gob.ar/servicio-nacional-de-manejo-del-fuego/recomendaciones-para-prevenir-incendios-forestales) | Riesgo de brasas que conservan calor y colillas encendidas; estaciones de asado y colilla. |
+| [SNMF · Prevención de incendios forestales](https://www.argentina.gob.ar/servicio-nacional-de-manejo-del-fuego/recomendaciones-para-prevenir-incendios-forestales) | Riesgo de brasas que conservan calor y fósforos encendidos; estaciones de asado y fósforo. |
 | [BioCórdoba · Convivir](https://biocordoba.cordoba.gob.ar/con-la-campana-convivir-ayudanos-a-cuidar-la-fauna-silvestre-de-la-ciudad-de-cordoba/) | Presencia provincial del zorro gris pampeano, convivencia con fauna y atención especializada. |
 | [SIB · Parques Nacionales · Lycalopex gymnocercus](https://sib.gob.ar/especies/lycalopex-gymnocercus) | Identificación, origen autóctono, descripción y hábitos del zorro; ficha de bitácora. |
 | [Parques Nacionales · Quebrada del Condorito](https://www.argentina.gob.ar/parquesnacionales/centro/parque-nacional-quebrada-del-condorito/ficha-del-area-protegida) | Cóndor andino y lagarto verde de Achala, solo como lecturas opcionales. |

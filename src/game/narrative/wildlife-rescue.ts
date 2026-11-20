@@ -9,7 +9,7 @@ import type { VeterinarianView } from '../world/veterinarian-view';
 import type { FaunaAnimals } from '../world/fauna-animals';
 import { WildlifeRescueView } from '../world/wildlife-rescue-view';
 import { CARRIER_SIZE } from '../world/animal-carrier';
-import { FollowDistanceGate, NPC_MOVEMENT, turnTowards } from './npc-movement';
+import { FollowDistanceGate, turnTowards } from './npc-movement';
 import { RescueCamera } from './rescue-camera';
 
 export class WildlifeRescue {
@@ -83,10 +83,12 @@ export class WildlifeRescue {
   continueDialogue(): void {
     const stage = this.flow.currentStage;
     if (stage === 'rescue-identification' && this.flow.advanceFauna('rescue-loading')) {
-      this.elapsed = 0;
       this.view.beginLoading();
+      this.view.finishLoading();
+      this.flow.advanceFauna('rescue-ready');
       this.rescueCamera.begin(this.vet.object, this.carrier);
-      this.companionWalk = new WaypointWalker([this.companion.companionPosition.clone(), new THREE.Vector3(3,0,19.4)], NPC_MOVEMENT.companionSpeed, this.terrain);
+      this.companion.moveCompanion(new THREE.Vector3(3, 0, 19.4));
+      if (!this.skipping) this.dialogue('Veterinario', RESCUE_TEXT.departure);
     } else if (stage === 'rescue-ready' && this.flow.advanceFauna('rescue-walk')) {
       this.transport = new WaypointWalker(RESCUE_CONFIG.transportRoute, RESCUE_CONFIG.veterinarianSpeed, this.terrain);
       this.companionWalk = new WaypointWalker([this.companion.companionPosition.clone(), ...RESCUE_CONFIG.companionRoute.slice(1)], RESCUE_CONFIG.companionSpeed, this.terrain);
@@ -101,14 +103,7 @@ export class WildlifeRescue {
     if (!this.activated || paused) return;
     const stage = this.flow.currentStage;
     this.updateCompanion(delta);
-    if (stage === 'rescue-loading') {
-      this.elapsed = Math.min(RESCUE_CONFIG.loadingSeconds, this.elapsed + delta);
-      this.view.renderLoading(this.elapsed / RESCUE_CONFIG.loadingSeconds);
-      if (this.elapsed >= RESCUE_CONFIG.loadingSeconds && this.flow.advanceFauna('rescue-ready')) {
-        this.view.finishLoading();
-        if (!this.skipping) this.dialogue('Veterinario', RESCUE_TEXT.departure);
-      }
-    } else if (stage === 'rescue-walk' && this.transport) {
+    if (stage === 'rescue-walk' && this.transport) {
       const distance = Math.hypot(player.x - this.vet.object.position.x, player.z - this.vet.object.position.z);
       this.waiting = this.cameraLocked ? false : !this.following.update(distance);
       this.transport.update(delta, !this.waiting, this.cameraLocked ? 1 : this.following.speedScale(distance));

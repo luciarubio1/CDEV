@@ -4,7 +4,7 @@ export const DISCOVERABLE_INTERACTION_RADIUS = 2.25;
 export const DISCOVERABLE_LABEL_RADIUS = 7;
 
 export interface DiscoverableDefinition {
-  id: 'prevention' | 'preparation' | 'fauna' | 'soil' | 'community' | 'drought' | 'embers' | 'cigarette';
+  id: 'prevention' | 'preparation' | 'fauna' | 'soil' | 'community' | 'drought' | 'embers' | 'match';
   title: string;
   text: string;
   position: THREE.Vector3;
@@ -17,36 +17,36 @@ export interface DiscoverableDefinition {
 export const DISCOVERABLES: readonly DiscoverableDefinition[] = [
   {
     id: 'prevention',
-    title: 'Prevención',
-    text: 'Una chispa puede iniciar un incendio en vegetación seca. Evitar quemas, no arrojar colillas y respetar las indicaciones locales reduce riesgos.',
+    title: 'Cartel de fogón seguro',
+    text: 'El pictograma marca una conducta concreta: hacé fuego sólo en lugares habilitados y nunca lo pierdas de vista. Al apagarlo, usá agua, remové las cenizas y comprobá que todo quede frío.',
     position: new THREE.Vector3(-10.5, 0, 16.5),
     kind: 'sign',
   },
   {
     id: 'preparation',
-    title: 'Preparación',
-    text: 'Ante una emergencia, la información clara y la comunicación temprana ayudan a coordinar una respuesta segura.',
+    title: 'Mochila de respuesta',
+    text: 'Las correas, el bolsillo y el rollo muestran equipo listo para salir. Ante un aviso, contá qué ves, dónde está y una referencia cercana del lugar para que el equipo pueda ubicarlo.',
     position: new THREE.Vector3(-2, 0, 7),
     kind: 'backpack',
   },
   {
     id: 'fauna',
-    title: 'Fauna',
-    text: 'El fuego destruye refugios, alimento y rutas de desplazamiento de muchas especies. El impacto continúa cuando las llamas se apagan.',
+    title: 'Huellas en el sendero',
+    text: 'Estas pisadas son rastros genéricos: no alcanzan para asignarlas a una especie. El fuego puede cortar refugios y recorridos; por eso los animales pueden quedar desorientados aun después de apagar las llamas.',
     position: new THREE.Vector3(-17, 0, -9),
     kind: 'fauna',
   },
   {
     id: 'soil',
-    title: 'Suelo',
-    text: 'La vegetación y el suelo pueden tardar años en recuperarse. Las zonas quemadas quedan más expuestas a erosión y pérdida de biodiversidad.',
+    title: 'Árbol quemado y suelo expuesto',
+    text: 'El tronco carbonizado y la base sin cobertura muestran que el suelo quedó más desprotegido. Cuando vuelve a llover, el agua puede arrastrar tierra y cenizas con más facilidad.',
     position: new THREE.Vector3(-5, 0, -5),
     kind: 'burned-tree',
   },
   {
     id: 'community',
-    title: 'Comunidad',
-    text: 'La prevención es colectiva. Ante un incendio real, alejate de la zona, avisá a los servicios de emergencia y seguí las indicaciones de las autoridades.',
+    title: 'Puesto de observación',
+    text: 'Desde este telescopio, una loma o camino visible sirve de referencia para ubicar una columna de humo. Al comunicar un aviso, describí dónde la viste y alejate de la zona siguiendo a las autoridades.',
     position: new THREE.Vector3(15, 0, 14),
     kind: 'lookout',
   },
@@ -64,9 +64,9 @@ export const EPILOGUE_DISCOVERABLES: readonly DiscoverableDefinition[] = [
     text: 'Posible fuente de ignición: brasas que aún conservan calor pueden iniciar un fuego al contactar vegetación seca. Esta estación no identifica una causa confirmada de esta partida.',
   },
   {
-    id: 'cigarette', title: 'Colilla encendida', kind: 'lookout', category: 'Comprender el incendio', epilogueOnly: true,
+    id: 'match', title: 'Fósforo apagado', kind: 'lookout', category: 'Comprender el incendio', epilogueOnly: true,
     position: new THREE.Vector3(-8, 0, 15),
-    text: 'Posible fuente de ignición: una colilla encendida puede iniciar un foco bajo condiciones favorables. No toda colilla provoca un incendio, pero arrojarla encendida aumenta el riesgo.',
+    text: 'Posible fuente de ignición: un fósforo encendido puede iniciar un foco bajo condiciones favorables. Apagalo por completo antes de desecharlo.',
   },
 ];
 
@@ -99,7 +99,13 @@ function createVisual(definition: DiscoverableDefinition): { object: THREE.Group
     object.add(post);
     const board = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.62, 0.08), material(0xc8a75c));
     board.position.y = 1.22;
-    object.add(board);
+    const heading = new THREE.Mesh(new THREE.BoxGeometry(.78,.09,.025), new THREE.MeshStandardMaterial({ color: 0x9a3f28, roughness: .75 }));
+    heading.position.set(0,1.43,-.055);
+    const fire = new THREE.Mesh(new THREE.ConeGeometry(.11,.27,5), new THREE.MeshStandardMaterial({ color: 0xdf6737, roughness: .7 }));
+    fire.position.set(0,1.18,-.065);
+    const fireBase = new THREE.Mesh(new THREE.TorusGeometry(.18,.035,6,10), wood);
+    fireBase.rotation.x=Math.PI/2; fireBase.position.set(0,1.08,-.065);
+    object.add(board, heading, fire, fireBase);
   } else if (definition.kind === 'backpack') {
     const bag = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.64, 0.32), fabric);
     bag.position.y = 0.36;
@@ -107,13 +113,23 @@ function createVisual(definition: DiscoverableDefinition): { object: THREE.Group
     const roll = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.54, 12), material(0xb69c6c));
     roll.position.set(0, 0.76, 0);
     roll.rotation.z = Math.PI / 2;
-    object.add(roll);
+    const pocket = new THREE.Mesh(new THREE.BoxGeometry(.38,.22,.06), material(0x4d624a));
+    pocket.position.set(0,.31,-.19);
+    for (const x of [-.24,.24]) {
+      const strap = new THREE.Mesh(new THREE.BoxGeometry(.06,.68,.08), material(0x374539));
+      strap.position.set(x,.42,.18); object.add(strap);
+    }
+    const tie = new THREE.Mesh(new THREE.BoxGeometry(.58,.045,.05), material(0x544733)); tie.position.set(0,.76,0);
+    object.add(roll, pocket, tie);
   } else if (definition.kind === 'fauna') {
-    [-0.28, 0, 0.28].forEach((x, index) => {
-      const print = new THREE.Mesh(new THREE.CircleGeometry(index === 1 ? 0.16 : 0.12, 12), ash);
-      print.rotation.x = -Math.PI / 2;
-      print.position.set(x, 0.035, index % 2 === 0 ? 0.12 : -0.08);
-      object.add(print);
+    [-.3,0,.3].forEach((x,index) => {
+      const print = new THREE.Group();
+      const pad = new THREE.Mesh(new THREE.SphereGeometry(.11,10,6),ash); pad.scale.set(1,.22,.85); pad.rotation.x=-Math.PI/2;
+      pad.position.y=.025; print.add(pad);
+      for (const toeX of [-.075,0,.075]) {
+        const toe=new THREE.Mesh(new THREE.SphereGeometry(.042,8,5),ash);toe.scale.set(1,.18,.9);toe.rotation.x=-Math.PI/2;toe.position.set(toeX,.022,-.11);print.add(toe);
+      }
+      print.position.set(x,.012,index%2===0?.13:-.1); print.rotation.y=index%2===0?.18:-.16; object.add(print);
     });
   } else if (definition.kind === 'burned-tree') {
     const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.27, 2.1, 10), ash);
@@ -123,15 +139,23 @@ function createVisual(definition: DiscoverableDefinition): { object: THREE.Group
     const branch = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.09, 1, 8), ash);
     branch.position.set(0.2, 1.65, 0);
     branch.rotation.z = Math.PI / 2.7;
-    object.add(branch);
+    const exposed = new THREE.Mesh(new THREE.CircleGeometry(.72,12), material(0x514437));
+    exposed.rotation.x=-Math.PI/2; exposed.position.y=.015;
+    object.add(branch, exposed);
   } else {
     const base = new THREE.Mesh(new THREE.CylinderGeometry(0.46, 0.56, 0.22, 12), wood);
     base.position.y = 0.11;
     object.add(base);
+    for (const [x,z] of [[-.34,-.22],[.34,-.22],[0,.38]]) {
+      const leg=new THREE.Mesh(new THREE.CylinderGeometry(.035,.055,1.05,6),wood);leg.position.set(x,.54,z);leg.rotation.set(z*.9,0,-x*.9);object.add(leg);
+    }
     const scope = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 0.8, 12), brass);
-    scope.position.y = 1.02;
+    scope.position.y = 1.12;
     scope.rotation.z = Math.PI / 2;
-    object.add(scope);
+    const lens = new THREE.Mesh(new THREE.CylinderGeometry(.125,.125,.035,12), new THREE.MeshStandardMaterial({ color:0x6fb9cf, emissive:0x164a5d, emissiveIntensity:.45, roughness:.35 }));
+    lens.rotation.z=Math.PI/2;lens.position.set(.42,1.12,0);
+    const ocular=new THREE.Mesh(new THREE.CylinderGeometry(.07,.08,.15,10),material(0x273333));ocular.rotation.z=Math.PI/2;ocular.position.set(-.43,1.12,0);
+    object.add(scope,lens,ocular);
   }
 
   const marker = new THREE.Mesh(
@@ -139,7 +163,7 @@ function createVisual(definition: DiscoverableDefinition): { object: THREE.Group
     new THREE.MeshStandardMaterial({ color: 0x8ed1c0, emissive: 0x1c6a58, emissiveIntensity: 0.7 }),
   );
   marker.rotation.x = Math.PI / 2;
-  marker.position.y = definition.kind === 'fauna' ? 0.06 : 0.14;
+  marker.position.set(definition.kind === 'fauna' ? 1.1 : 1.35, definition.kind === 'fauna' ? .045 : .14, definition.kind === 'fauna' ? -.6 : .85);
   object.add(marker);
   // Placa celeste flotante: complementa el círculo del suelo sin recargar el paisaje.
   const plaque = new THREE.Group();
@@ -237,7 +261,7 @@ export class DiscoverableSystem {
     this.elapsed += delta;
     this.entries.filter((entry) => !entry.found).forEach((entry, index) => {
       entry.marker.rotation.z += delta * 0.8;
-      entry.marker.position.y = (entry.definition.kind === 'fauna' ? 0.06 : 0.14) + Math.sin(this.elapsed * 2 + index) * 0.025;
+      entry.marker.position.y = (entry.definition.kind === 'fauna' ? .045 : .14) + Math.sin(this.elapsed * 2 + index) * 0.025;
     });
   }
 

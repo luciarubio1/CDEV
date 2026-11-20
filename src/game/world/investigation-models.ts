@@ -127,25 +127,16 @@ export function createCampStation(height:GroundHeight):{object:THREE.Group;subje
   return {object,subject};
 }
 
-export function createCigaretteStation(height:GroundHeight):{object:THREE.Group;subject:THREE.Group} {
-  const object=new THREE.Group(),subject=new THREE.Group();object.name='cigarette-station';subject.name='cigarette-evidence';object.add(subject);
-  patch(object,height,.01,0,S.cigarette.stainRadius,S.colors.charcoal,203);
-  const direction=new THREE.Vector3(Math.cos(.4),0,Math.sin(.4)),half=.03;
+export function createMatchStation(height:GroundHeight):{object:THREE.Group;subject:THREE.Group} {
+  const object=new THREE.Group(),subject=new THREE.Group();object.name='match-station';subject.name='match-evidence';object.add(subject);
+  patch(object,height,.01,0,S.match.stainRadius,S.colors.charcoal,203);
+  const direction=new THREE.Vector3(Math.cos(.4),0,Math.sin(.4)),half=S.match.stickLength/2;
   direction.y=(height(direction.x*half,direction.z*half)-height(-direction.x*half,-direction.z*half))/(half*2);direction.normalize();
-  subject.position.y=height(0,0)+S.cigarette.radius+.001;subject.quaternion.setFromUnitVectors(new THREE.Vector3(1,0,0),direction);
-  const segment=(name:string,length:number,x:number,radius:number,color:number)=>{
-    const mesh=new THREE.Mesh(new THREE.CylinderGeometry(radius,radius,length,8),visualMaterial(color,0,1));mesh.name=name;mesh.rotation.z=-Math.PI/2;mesh.position.x=x;subject.add(mesh);
-    return mesh;
-  };
-  segment('cigarette-filter',S.cigarette.filterLength,-S.cigarette.filterLength/2,S.cigarette.radius,S.colors.filter);
-  segment('cigarette-paper',S.cigarette.paperLength,S.cigarette.paperLength/2,S.cigarette.radius*.97,S.colors.paper);
-  const consumed=segment('cigarette-consumed-end',S.cigarette.consumedLength,S.cigarette.paperLength+S.cigarette.consumedLength/2,S.cigarette.radius*.85,S.colors.consumed);
-  const tip=consumed.geometry.attributes.position;
-  for(let i=0;i<tip.count;i++){tip.setX(i,tip.getX(i)*(.8+noise(i+400)*.2));if(tip.getY(i)>0)tip.setY(i,tip.getY(i)-noise(i+420)*.001);}
-  consumed.geometry.computeVertexNormals();
-  for(let i=0;i<7;i++){
-    const piece=new THREE.Mesh(stoneGeometry,ash);piece.name='cigarette-ash';piece.scale.set(.0015+noise(i+310)*.0015,.0008,.0015);
-    piece.position.set(S.cigarette.paperLength+S.cigarette.consumedLength+.002+noise(i+320)*.008,-.003,(noise(i+330)-.5)*.015);piece.rotation.y=i;subject.add(piece);
-  }
+  subject.position.y=height(0,0)+S.match.headRadius+.001;
+  subject.quaternion.setFromUnitVectors(new THREE.Vector3(1,0,0),direction);
+  const stick=new THREE.Mesh(new THREE.CylinderGeometry(S.match.stickRadius,S.match.stickRadius,S.match.stickLength,6),visualMaterial(S.colors.matchWood,0,1));
+  stick.name='match-stick';stick.rotation.z=-Math.PI/2;subject.add(stick);
+  const head=new THREE.Mesh(new THREE.SphereGeometry(S.match.headRadius,10,6),visualMaterial(S.colors.matchHead,0,1));
+  head.name='spent-match-head';head.scale.set(1.5,.8,1);head.position.x=half;subject.add(head);
   return {object,subject};
 }

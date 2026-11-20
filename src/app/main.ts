@@ -1178,6 +1178,7 @@ function finishReinforcements(): void {
   reinforcementSequence.advanceContainment(updateReinforcementContainment);
   collisionSystem.addCircle(REINFORCEMENT_LAYOUT.truckStop, 2.9);
   companionCollider = collisionSystem.addCircle(reinforcementView.companionPosition, 0.4);
+  assistanceView.show(collisionSystem);
   gameSession.beginCompanionDialogue();
   cinematicOverlay.classList.remove('visible');
   reinforcementView.restorePlayer(camera);

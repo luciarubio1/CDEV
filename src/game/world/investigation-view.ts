@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { INVESTIGATION_STATIONS } from '../narrative/investigation-data';
-import { createDroughtStation,createCampStation,createCigaretteStation,inspectionGroundHeight } from './investigation-models';
+import { createDroughtStation,createCampStation,createMatchStation,inspectionGroundHeight } from './investigation-models';
 
 /** Cold evidence only; no lights, FireSource, damage or progression in these builders. */
 export class InvestigationView {
@@ -9,7 +9,7 @@ export class InvestigationView {
   readonly subjects:THREE.Group[]=[];
   readonly stations:THREE.Group[]=[];
   constructor(terrain:(x:number,z:number)=>number) {
-    const builders=[createDroughtStation,createCampStation,createCigaretteStation];
+    const builders=[createDroughtStation,createCampStation,createMatchStation];
     const markerOffsets=[[-1.12,.55],[-.86,.75],[-.17,.12]],radii=[.1,.1,.065];
     const markerMaterial=new THREE.MeshBasicMaterial({color:0x8ed1c0,transparent:true,opacity:.65,depthWrite:false});
     INVESTIGATION_STATIONS.forEach((station,index)=>{

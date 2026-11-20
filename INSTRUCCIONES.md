@@ -33,9 +33,9 @@ Los controladores narrativos separan el orden de las etapas de sus objetos visua
 
 `PostFireProgression` valida asistencia, fauna, recogida/entrega y rescate. La asistencia se completa una vez. En salud reducida hay recuperación gradual; con salud completa se usa una revisión breve sin lesión. No se incorpora selección de tratamientos ni instrucciones médicas.
 
-`FaunaTour` coordina compañero, refugio y aviso único al veterinario. `WildlifeRescue` controla identificación → carga → diálogo de partida → traslado → colocación → llegada → encuentro de investigación. Durante el traslado cinematográfico el jugador observa desde fuera: no conduce al veterinario mediante su distancia a la cámara. Fuera de escenas, el acompañamiento conserva espera por distancia.
+`FaunaTour` coordina compañero, refugio y aviso único al veterinario. `WildlifeRescue` controla identificación → carga → diálogo de partida → traslado → colocación → llegada → encuentro de investigación. Tras la identificación, el zorro aparece dentro del transportín en brazos del veterinario. Durante el traslado cinematográfico el jugador observa desde fuera: no conduce al veterinario mediante su distancia a la cámara. Fuera de escenas, el acompañamiento conserva espera por distancia.
 
-`InvestigationTour`: introducción → caminata/observación/pregunta por estación → conclusión → regreso → cierre → completado. El orden fijo es sequía, restos de asado y colilla. Las dos respuestas permiten avanzar después de una devolución; se conservan internamente sin puntajes. Las fichas usan la bitácora existente y fuentes oficiales. Los cinco hallazgos opcionales tienen un contador independiente.
+`InvestigationTour`: introducción → caminata/observación/pregunta por estación → conclusión → regreso → cierre → completado. El orden fijo es sequía, restos de asado y fósforo. Las dos respuestas permiten avanzar después de una devolución; se conservan internamente sin puntajes. Las fichas usan la bitácora existente y fuentes oficiales. Los cinco hallazgos opcionales tienen un contador independiente.
 
 No abrir el cierre final desde el fin del combate ni desde el rescate: el panel aparece tras terminar u omitir la cinemática final. El éxito presenta un mensaje de concientización y los botones **Volver a recorrer** y **Créditos**; las derrotas explican lo ocurrido y permiten reintentar. No se muestran tablas, tiempos ni métricas de rendimiento. `GameStats`, agua, riesgo, salud y los estados narrativos se conservan para no alterar la lógica existente. Se retiraron únicamente el compositor y formateadores de estadísticas finales sin consumidores.
 
@@ -56,7 +56,7 @@ Centralizados en `src/game/narrative/npc-movement.ts`, objeto `NPC_MOVEMENT`:
 
 El jugador conserva 3.2 m/s (`GAME_BALANCE.movement.speed`). Los NPC caminan algo más despacio para poder alcanzarlos. `FollowDistanceGate` mantiene la espera entre ambos umbrales; reduce el ritmo al acercarse al límite. Los paneles bloqueantes congelan posición y reloj de recorrido, sin desplazamiento residual. Al cambiar rutas, volver a verificar objetos y actores, también el volumen del transportín durante giros.
 
-La llegada de apoyo conserva 15 s totales: el camión se detiene a los 7 s, el equipo aparece a los 8 s y completa su traslado a los 11.8 s. `ReinforcementView` conserva curvas suaves de movimiento y un final determinista. No se aceleran carga (9 s), colocación (4 s), evaluación (2.5 s), asistencia (7 s) ni revisión sana (2.5 s).
+La llegada de apoyo conserva 15 s totales: el camión se detiene a los 7 s, el equipo aparece a los 8 s y completa su traslado a los 11.8 s. `ReinforcementView` conserva curvas suaves de movimiento y un final determinista. La carga del zorro pasa directamente al transportín tras la identificación. No se aceleran colocación (4 s), evaluación (2.5 s), asistencia (7 s) ni revisión sana (2.5 s).
 
 ## Cámara y secuencia de rescate
 
@@ -207,7 +207,7 @@ La rama de `createPointVisual` usada con el camión nuevo retornaba solamente un
 - **Suelo y camino:** `terrain.ts` conserva exactamente `getTerrainHeight`; solo cambia los colores por vértice y combina variaciones de tierra/ocre/gris/verde seco. `road-layout.ts` contiene los mismos puntos del camino y su ancho; la distancia al eje suaviza la transición con la tierra. Se retiran las antiguas láminas planas superpuestas para evitar flotación/intersecciones en las lomas. Las manchas quemadas iniciales siguen en el color del suelo y las cicatrices de extinción siguen en `burned-ground.ts`.
 - **Árboles:** `sierra-vegetation.ts` crea tres variantes de tronco, ramas y copas agrupadas irregulares, con geometrías y materiales compartidos. Mantienen posición, altura de referencia, orden e índices del combustible anterior. Los colliders se reducen al tronco. `VegetationStateSystem` sigue registrando cada árbol; al registrar, comparte clones de material dentro de un árbol pero los aísla entre plantas, conservando quemado individual.
 - **Recursos revisados:** se inspeccionaron mallas, materiales, texturas y límites de los GLB locales. `TreeHigh001.glb` usa 36 vértices y una silueta muy estrecha/alta; queda conservado como recurso, pero ya no representa los árboles del mapa. `Bush001 (1).glb` (34 vértices) se reutiliza, ajustando altura, cuerpo al collider y tinte determinístico con `styleSierraBush`. `Rock001.glb` y `Grass001.glb` también se mantienen. Esa inspección de datos no es una revisión visual renderizada.
-- **Detalle:** `landscape-decoration.ts` genera grupos seleccionados de pasto, piedras y ramas en tres lotes `InstancedMesh`, con semillas fijas y apoyo según relieve. No proyectan sombras individuales. `decorativePlacements` fija los grupos y `isLandscapeReserved` protege camino, zona segura, asistencia/fauna/refuerzos, estaciones, hallazgos y focos. Cambiar esas reservas al mover objetivos; las briznas no deben tapar huellas, colilla ni grietas.
+- **Detalle:** `landscape-decoration.ts` genera grupos seleccionados de pasto, piedras y ramas en tres lotes `InstancedMesh`, con semillas fijas y apoyo según relieve. No proyectan sombras individuales. `decorativePlacements` fija los grupos y `isLandscapeReserved` protege camino, zona segura, asistencia/fauna/refuerzos, estaciones, hallazgos y focos. Cambiar esas reservas al mover objetivos; las briznas no deben tapar huellas, fósforo ni grietas.
 
 La decoración no se registra en `FireSystem` ni en `VegetationStateSystem`: no agrega combustible, daño, superficie ni métricas. Su pasto sí puede oscurecerse de forma persistente por exposición visual al fuego. Los 15 árboles combustibles conservan `ignitionDistance = 5.5`, `ignitionTime = 10 + (índice % 4) * 3`; arbustos y pasto jugable mantienen sus registros visuales previos. No se habilitan propagación ni oleadas ni se alteran misiones/duraciones.
 
@@ -257,7 +257,7 @@ Se conservan posiciones, rutas, preguntas, respuestas, bitácora y progresión. 
 
 - **Sequía:** hojas finas curvas en grupos irregulares, tonos pajizos, suelo visible, hojas caídas y grietas ramificadas. Se conserva la distinción entre condiciones de propagación y fuentes de ignición.
 - **Asado:** piedras variadas, parrilla metálica con marco, barras y apoyos, carbón, ceniza, madera parcialmente carbonizada, utensilio y recipiente. Todo está frío, sin luces, brasas activas ni daño. Sigue siendo un posible origen, sin confirmar una causa.
-- **Colilla:** filtro, papel, extremo consumido irregular y ceniza, con unos 4,7 cm de longitud y 8 mm de diámetro. La marca tiene contorno irregular y borde difuminado. No se amplía el modelo ni se dibuja una colilla sustituta en la tarjeta.
+- **Fósforo:** palito de madera y cabeza apagada, de unos 4,4 cm. La marca del suelo conserva el contorno irregular y el borde difuminado.
 
 `world/investigation-models.ts` construye geometría estática y reutiliza materiales/geometrías. Las hojas se agrupan en `InstancedMesh`; no se reconstruyen por frame. `inspectionGroundHeight` interpola los triángulos de la malla real para apoyar detalles milimétricos: revisar sus constantes de tamaño/segmentos si cambia la resolución del terreno. `investigation-view.ts` coloca los indicios y pequeños anillos desplazados fuera de la evidencia, que desaparecen al inspeccionar.
 
@@ -265,14 +265,14 @@ Se conservan posiciones, rutas, preguntas, respuestas, bitácora y progresión. 
 
 Ajustes:
 
-- `INVESTIGATION_STYLE` en `world/investigation-style.ts`: cantidad/altura de hojas, tamaño del fogón, grosor del metal, medidas reales de colilla y paleta compartida.
-- `INSPECTION_FRAMES`, en el mismo archivo y en orden sequía/asado/colilla: `fov`, `direction`, `fitMargin`, `minDistance`, `near` y `groundClearance`. La colilla necesita un plano cercano pequeño; no aumentar su escala para acercarla.
+- `INVESTIGATION_STYLE` en `world/investigation-style.ts`: cantidad/altura de hojas, tamaño del fogón, grosor del metal, medidas reales del fósforo y paleta compartida.
+- `INSPECTION_FRAMES`, en el mismo archivo y en orden sequía/asado/fósforo: `fov`, `direction`, `fitMargin`, `minDistance`, `near` y `groundClearance`. El pasto seco usa un foco más cercano y elevado para dejar la mesa fuera de cuadro; el fósforo necesita un plano cercano pequeño sin ampliar el modelo.
 - `investigation-models.ts`: distribución y formas; `investigation-view.ts`: desplazamientos/radios de señales. No mover estaciones o rutas para cambiar únicamente la composición.
 - `inspection-camera.ts` y `.discoverable-card--inspection` en estilos: área libre y diseño adaptable; conservar sincronizado el umbral de relación de aspecto 1,15.
 
 Banco aislado con `npm run dev`: `/tests/investigation-preview.html`. Permite seleccionar estación, orbitar, inspeccionar con F o botón, responder con mouse/Tab/Enter, consultar bitácora con B y reiniciar. Usa modelos, terreno y controlador reales; no sustituye la prueba de misiones en producción.
 
-Validación: `npm run build`, las 54 pruebas de `npm run test:v2` y `git diff --check` pasaron. Las pruebas nuevas cubren modelos fríos, separación de señales, apoyo de colilla contra raycast, encuadres horizontales/verticales, redimensionado, cámara sobre terreno, restauración exacta de lente/pose/visibilidad y protección de respuestas/foco. La suite existente comprueba respuestas, notas, recorrido y reinicio. Son comprobaciones geométricas y de lógica, sin render WebGL.
+Validación: `npm run build`, las pruebas de `npm run test:v2` y `git diff --check` pasaron. Las pruebas nuevas cubren modelos fríos, separación de señales, apoyo del fósforo contra raycast, encuadres horizontales/verticales, redimensionado, cámara sobre terreno, restauración exacta de lente/pose/visibilidad y protección de respuestas/foco. La suite existente comprueba respuestas, notas, recorrido y reinicio. Son comprobaciones geométricas y de lógica, sin render WebGL.
 
 No hubo navegador conectado para revisión visual. Queda recorrer las tres estaciones e inspeccionarlas en ventana horizontal/vertical: siluetas, materiales, legibilidad, transparencias, parpadeos y objetos flotantes. En producción verificar entrada/salida desde distintas orientaciones, manos/manguera/carga ocultas y restauradas, ambas respuestas, bitácora, compañero y reinicio. La compilación no confirma la apariencia. El README permanece breve y sin cambios.
 

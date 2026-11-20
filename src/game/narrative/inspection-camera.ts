@@ -39,7 +39,14 @@ export class InspectionCamera {
   }
   private fit(subject:THREE.Object3D,frame:InspectionFrame,aspect:number):void {
     this.aspect=aspect;
-    this.bounds.setFromObject(subject);this.bounds.getBoundingSphere(this.sphere);this.center.copy(this.sphere.center);
+    if ('focusRadius' in frame) {
+      subject.getWorldPosition(this.center);
+      this.center.y += .15;
+      this.sphere.center.copy(this.center);
+      this.sphere.radius = frame.focusRadius;
+    } else {
+      this.bounds.setFromObject(subject);this.bounds.getBoundingSphere(this.sphere);this.center.copy(this.sphere.center);
+    }
     const half=THREE.MathUtils.degToRad(frame.fov/2),bottom=aspect<=1.15;
     const fitHalf=Math.min(Math.atan(Math.tan(half)*(bottom ? .48 : 1)),Math.atan(Math.tan(half)*aspect*(bottom ? .94 : .58)));
     const distance=Math.max(frame.minDistance,this.sphere.radius/Math.sin(fitHalf)*frame.fitMargin);

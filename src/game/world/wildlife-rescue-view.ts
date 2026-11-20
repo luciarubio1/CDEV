@@ -13,12 +13,6 @@ export class WildlifeRescueView {
   readonly station: WildlifeStation;
   private readonly carrierStart = new THREE.Vector3();
   private readonly carrierRotation = new THREE.Quaternion();
-  private readonly foxStart = new THREE.Vector3();
-  private readonly vetStart = new THREE.Vector3();
-  private readonly staging = new THREE.Vector3();
-  private readonly carryTarget = new THREE.Vector3();
-  private readonly carryRotation = new THREE.Quaternion();
-  private readonly animalTarget = new THREE.Vector3();
   private readonly stationTarget = new THREE.Vector3();
   private readonly neutralRotation = new THREE.Quaternion();
   private readonly foxBounds = new THREE.Box3();
@@ -34,56 +28,20 @@ export class WildlifeRescueView {
   ) {
     this.station = new WildlifeStation(terrain);
     this.object.add(this.station.object);
-    this.staging.copy(RESCUE_CONFIG.loadingCarrier);
-    this.staging.y = terrain(this.staging.x, this.staging.z);
   }
   hold(camera: THREE.Camera): void { this.carrying.hold(camera, this.carrier); }
   beginLoading(): void {
     this.carrying.release(this.object, this.carrier);
-    this.carrierStart.copy(this.carrier.position);
-    this.carrierRotation.copy(this.carrier.quaternion);
-    this.foxStart.copy(this.animals.fox.position);
-    this.vetStart.copy(this.vet.object.position);
-  }
-  renderLoading(progress: number): void {
-    const veterinarian = this.vet.object;
-    veterinarian.position.lerpVectors(this.vetStart, RESCUE_CONFIG.loadingVeterinarian, smooth(progress / 0.25));
-    veterinarian.position.y = this.terrain(veterinarian.position.x, veterinarian.position.z);
-    veterinarian.rotation.y = Math.atan2(this.staging.x - veterinarian.position.x, this.staging.z - veterinarian.position.z);
-    this.vet.evaluate(progress);
-    if (progress <= 0.8) {
-      this.carrier.position.lerpVectors(this.carrierStart, this.staging, smooth(progress / 0.25));
-      this.carrier.quaternion.slerpQuaternions(this.carrierRotation, this.neutralRotation, smooth(progress / 0.25));
-      const open = progress < 0.7 ? smooth((progress - 0.25) / 0.15) : 1 - smooth((progress - 0.7) / 0.1);
-      setCarrierDoor(this.carrier, open);
-    }
-    if (progress >= 0.4 && this.animals.fox.parent !== this.carrier) {
-      this.animalTarget.copy(this.staging);
-      this.animalTarget.x += 0.07;
-      this.animalTarget.y += 0.1;
-      this.animals.fox.position.lerpVectors(this.foxStart, this.animalTarget, smooth((progress - 0.4) / 0.3));
-      const fox = this.animals.fox;
-      fox.position.y = Math.max(fox.position.y, this.terrain(fox.position.x, fox.position.z));
-      if (progress >= 0.7) {
-        this.carrier.updateWorldMatrix(true, true);
-        this.carrier.attach(fox);
-        fox.position.set(0.07, 0.1, 0);
-        this.fitFoxInsideCarrier(fox);
-        this.animals.restFox();
-      }
-    }
-    if (progress > 0.8) {
-      this.carryTarget.set(0, CARRIER_CARRY_POSE.height, CARRIER_CARRY_POSE.forward);
-      veterinarian.updateWorldMatrix(true, false);
-      veterinarian.localToWorld(this.carryTarget);
-      veterinarian.getWorldQuaternion(this.carryRotation);
-      this.carrier.position.lerpVectors(this.staging, this.carryTarget, smooth((progress - 0.8) / 0.2));
-      this.carrier.quaternion.slerpQuaternions(this.neutralRotation, this.carryRotation, smooth((progress - 0.8) / 0.2));
-      this.vet.carryPose(true, this.carrier);
-    }
   }
   finishLoading(): void {
-    this.renderLoading(1);
+    // Corte directo: el zorro pasa del suelo al transportín ya sostenido.
+    this.vet.object.position.copy(RESCUE_CONFIG.loadingVeterinarian);
+    this.vet.object.position.y = this.terrain(this.vet.object.position.x, this.vet.object.position.z);
+    const fox = this.animals.fox;
+    this.carrier.attach(fox);
+    fox.position.set(0.07, 0.1, 0);
+    this.fitFoxInsideCarrier(fox);
+    this.animals.restFox();
     setCarrierDoor(this.carrier, 0);
     this.vet.object.updateWorldMatrix(true, true);
     this.vet.object.attach(this.carrier);

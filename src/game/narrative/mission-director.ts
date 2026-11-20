@@ -20,7 +20,8 @@ export interface MissionNavigationTarget {
   priority: number;
 }
 
-function createRadio(): THREE.Group {
+interface RadioVisual { object: THREE.Group; indicator: THREE.MeshStandardMaterial; }
+function createRadio(): RadioVisual {
   const radio = new THREE.Group();
   const dark = new THREE.MeshStandardMaterial({ color: 0x243238, roughness: 0.75 });
   const accent = new THREE.MeshStandardMaterial({
@@ -29,19 +30,34 @@ function createRadio(): THREE.Group {
     emissiveIntensity: 0.7,
     roughness: 0.5,
   });
-  const body = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.52, 0.25), dark);
-  const support = new THREE.Mesh(new THREE.BoxGeometry(.56,.16,.36),dark);
-  support.position.y = .08; radio.add(support);
-  body.position.y = 0.42;
-  radio.add(body);
-  const screen = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.17, 0.02), accent);
-  screen.position.set(-0.12, 0.45, -0.14);
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(.48,.58,.12,8), new THREE.MeshStandardMaterial({ color: 0x394542, roughness: .9 }));
+  base.position.y = .06;
+  const support = new THREE.Mesh(new THREE.BoxGeometry(.66,.18,.44),dark);
+  support.position.y = .18;
+  const body = new THREE.Mesh(new THREE.BoxGeometry(.86,.62,.34), dark);
+  body.position.y = .55;
+  const face = new THREE.Mesh(new THREE.BoxGeometry(.66,.46,.025), new THREE.MeshStandardMaterial({ color: 0x1b272b, roughness: .72 }));
+  face.position.set(0,.55,-.185);
+  radio.add(base, support, body, face);
+  // Frente legible a distancia: pantalla, rejilla y un único PTT grande.
+  const screen = new THREE.Mesh(new THREE.BoxGeometry(.24,.16,.022), accent);
+  screen.position.set(-.18,.67,-.207);
   radio.add(screen);
+  for (const y of [.43,.51,.59]) {
+    const grille = new THREE.Mesh(new THREE.BoxGeometry(.23,.025,.026), new THREE.MeshStandardMaterial({ color: 0x687773, roughness: .8 }));
+    grille.position.set(.15,y,-.208); radio.add(grille);
+  }
+  const button = new THREE.Mesh(new THREE.CylinderGeometry(.075,.075,.035,10), new THREE.MeshStandardMaterial({ color: 0xd46a43, roughness: .6 }));
+  button.rotation.x = Math.PI / 2; button.position.set(.31,.7,-.21); radio.add(button);
+  const indicator = new THREE.MeshStandardMaterial({ color: 0x8ee6d3, emissive: 0x0d5a50, emissiveIntensity: .55, roughness: .45 });
+  const lamp = new THREE.Mesh(new THREE.SphereGeometry(.045,8,6), indicator);
+  lamp.position.set(-.31,.43,-.215); radio.add(lamp);
   const antenna = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.85, 8), dark);
-  antenna.position.set(0.24, 1.02, 0);
+  antenna.position.set(.28, 1.14, 0);
   antenna.rotation.z = -0.18;
   radio.add(antenna);
-  return radio;
+  radio.traverse((child) => { if (child instanceof THREE.Mesh) { child.castShadow = true; child.receiveShadow = true; } });
+  return { object: radio, indicator };
 }
 
 /** Recorrido único V2. Cada incidente se crea al entrar a su etapa. */
@@ -49,7 +65,9 @@ export class MissionDirector {
   readonly object = new THREE.Group();
   readonly radioPosition: THREE.Vector3;
   private stage: MissionStage = 'idle';
-  private readonly radio = createRadio();
+  private readonly radioVisual = createRadio();
+  private readonly radio = this.radioVisual.object;
+  private radioSignalRemaining = 0;
   private accessFire: FireSource | null = null;
   private readonly criticalFires: FireSource[] = [];
   private notification = '';
@@ -63,6 +81,8 @@ export class MissionDirector {
     this.radioPosition = truckPosition.clone().add(new THREE.Vector3(3.4, 0, -1));
     this.radioPosition.y = getTerrainHeight(this.radioPosition.x, this.radioPosition.z);
     this.radio.position.copy(this.radioPosition);
+    const approach = ACCESS_FIRE_POSITION.clone().sub(this.radioPosition);
+    this.radio.rotation.y = Math.atan2(-approach.x, -approach.z);
     this.radio.visible = false;
     this.object.add(this.radio);
   }
@@ -104,13 +124,24 @@ export class MissionDirector {
   }
   requestReinforcements(position: THREE.Vector3): boolean {
     if (!this.isNearRadio(position)) return false;
-    this.radio.visible = false;
+    // El objetivo cambia de inmediato, pero el indicador confirma el uso antes
+    // de ocultar la radio; el pitido se dispara desde la misma interacción.
+    this.radioSignalRemaining = .55;
+    this.radio.visible = true;
     this.activateSector('house');
     this.announce('¡Ayuda en camino! Protegé la casa y después el bosque.');
     return true;
   }
   update(delta: number, _context: FireUpdateContext, _houseRiskRatio: number): MissionUpdate {
     this.notificationRemaining = Math.max(0, this.notificationRemaining - delta);
+    if (this.radioSignalRemaining > 0) {
+      this.radioSignalRemaining = Math.max(0, this.radioSignalRemaining - delta);
+      this.radioVisual.indicator.emissiveIntensity = 2.2 + Math.sin(this.radioSignalRemaining * 38) * .7;
+      if (this.radioSignalRemaining === 0 && this.stage !== 'radio') {
+        this.radio.visible = false;
+        this.radioVisual.indicator.emissiveIntensity = .55;
+      }
+    }
     if (this.stage === 'access' && this.accessFire && !this.accessFire.isActive) {
       this.stage = 'radio';
       this.radio.visible = true;
