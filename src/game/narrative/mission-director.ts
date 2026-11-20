@@ -5,6 +5,7 @@ import { getMissionBranch, type MissionRoute } from './mission-branch';
 
 export const ACCESS_FIRE_POSITION = new THREE.Vector3(-7, 0, -9);
 export const RADIO_INTERACTION_RADIUS = 2.5;
+const ACCESS_CONFIRMATION_SECONDS = 1.5;
 
 export type MissionStage = 'idle' | 'access' | 'radio' | 'house' | 'forest' | 'complete';
 
@@ -69,6 +70,7 @@ export class MissionDirector {
   private readonly radio = this.radioVisual.object;
   private radioSignalRemaining = 0;
   private accessFire: FireSource | null = null;
+  private accessExtinguishedElapsed = 0;
   private readonly criticalFires: FireSource[] = [];
   private notification = '';
   private notificationRemaining = 0;
@@ -117,7 +119,7 @@ export class MissionDirector {
     if (this.stage !== 'idle') return;
     this.stage = 'access';
     this.accessFire = this.createMissionFire(ACCESS_FIRE_POSITION, 1);
-    this.announce('¡Camino protegido! Ahora pedí ayuda por radio.');
+    this.accessExtinguishedElapsed = 0;
   }
   isNearRadio(position: THREE.Vector3): boolean {
     return this.stage === 'radio' && position.distanceTo(this.radioPosition) <= RADIO_INTERACTION_RADIUS;
@@ -143,6 +145,11 @@ export class MissionDirector {
       }
     }
     if (this.stage === 'access' && this.accessFire && !this.accessFire.isActive) {
+      this.accessExtinguishedElapsed += delta;
+    }
+    if (this.stage === 'access' &&
+      this.accessFire?.isFullyExtinguished &&
+      this.accessExtinguishedElapsed >= ACCESS_CONFIRMATION_SECONDS) {
       this.stage = 'radio';
       this.radio.visible = true;
       this.announce('¡Buen trabajo! Volvé al camión y pedí ayuda por radio.');

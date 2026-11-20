@@ -52,7 +52,7 @@ export class InvestigationTour {
       if (player.distanceTo(this.companion.companionPosition) > 3.2) return false;
       this.stage = 'intro';
       this.view.object.visible = true;
-      this.dialogue('Encontraron algunos indicios junto al sendero. Vamos a observarlos y entender qué pudo pasar.');
+      this.dialogue('Encontramos algunos indicios junto al sendero. Vamos a observarlos y entender qué pudo pasar.');
       return true;
     }
     if (this.stage === 'return' && this.walker?.finished && this.near(player, this.companion.companionPosition)) {

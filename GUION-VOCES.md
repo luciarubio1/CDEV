@@ -2,7 +2,8 @@
 
 ## Criterio de grabación
 
-- Público: primaria, grupo mixto.
+- Público principal: chicos y chicas de 11 a 12 años, último ciclo de primaria, grupo mixto.
+- Nivel de lenguaje: frases breves, vocabulario claro y uso de términos científicos adecuados para el último ciclo de primaria.
 - Voz: clara, cálida y tranquila.
 - Ritmo: una frase por respiración; dejar 1 segundo entre frases.
 - Entonación: acompañar, no asustar ni dar instrucciones de emergencia reales.
@@ -23,6 +24,12 @@
 | `mission-05` | Vivienda protegida | ¡La casa está protegida! Ahora cuidemos el bosque. | Protegé el bosque. |
 | `mission-06` | Misión principal | ¡Fuego controlado! Ahora podremos ayudar a los animales. | ¡Fuego controlado! |
 | `safety-01` | Antes de jugar | En un incendio real, alejate, avisá a un adulto y seguí sus indicaciones. | En un incendio real: alejate y avisá. |
+| `inicio_1` | Inicio actualizado | El fuego avanza por las sierras. | El fuego avanza. |
+| `inicio_2` | Inicio actualizado | Vamos a proteger la casa y el bosque. | Protejamos la casa y el bosque. |
+| `preparacion` | Preparación | Primero, prepará el equipo. | Prepará el equipo. |
+| `radio` | Ayuda pedida | ¡Ayuda en camino! Protegé la casa y después el bosque. | ¡Ayuda en camino! |
+| `casa_protegida` | Casa protegida | ¡Casa protegida! Ahora cuidá el bosque. | ¡Casa protegida! |
+| `final del incendio` | Fuego controlado | ¡Fuego controlado! | ¡Fuego controlado! |
 
 ## Escenas posteriores
 
@@ -34,6 +41,11 @@
 | `investigation-01` | Indicios | Vamos a observar con atención. Un indicio nos da información, pero no cuenta toda la historia. | Observá antes de sacar conclusiones. |
 | `investigation-02` | Cierre | Prevenir, comprender y cuidar: nuestras acciones pueden proteger la naturaleza. | Prevenir, comprender y cuidar. |
 | `ending-01` | Final | Las llamas se apagaron. El cuidado continúa. | El cuidado continúa. |
+| `investigacion` | Inicio de investigación | Encontramos algunos indicios junto al sendero. Vamos a observarlos y entender qué pudo pasar. | Encontramos algunos indicios. |
+| `cierre de investigacion` | Cierre de investigación | Contener el fuego fue una parte. Cuidar a quienes quedaron y comprender lo ocurrido también forma parte de la respuesta. | Comprender lo ocurrido también ayuda. |
+| `mision_cumplida` | Outro 1 | El fuego fue controlado, pero nuestra tarea no termina acá. | La tarea continúa. |
+| `mensaje_educativo` | Outro 2 | Prevenir incendios es responsabilidad de todos: cuidemos el bosque, respetemos sus animales y no dejemos residuos ni fuentes de ignición. | Prevenir es responsabilidad de todos. |
+| `aviso_de_seguridad` | Outro 3 | Ante un incendio real, alejate, avisá a los servicios de emergencia y seguí las indicaciones de las autoridades. | Ante un incendio real: alejate y avisá. |
 
 ## Indicaciones para edición
 
